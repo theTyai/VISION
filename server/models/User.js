@@ -43,7 +43,17 @@ const userSchema = new mongoose.Schema({
   codingSubmitted: {
     type: Boolean,
     default: false
-  }
+  },
+  isSuspended: {
+    type: Boolean,
+    default: false
+  },
+  isEmailVerified: {
+    type: Boolean,
+    default: false
+  },
+  emailVerificationToken: String,
+  emailVerificationExpires: Date
 }, { timestamps: true });
 
 userSchema.pre('save', async function(next) {

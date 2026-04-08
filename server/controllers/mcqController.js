@@ -49,7 +49,7 @@ exports.saveAnswers = async (req, res) => {
 
 exports.submitMCQ = async (req, res) => {
   try {
-    const { answers } = req.body;
+    const { answers, suspended } = req.body;
 
     const user = await User.findById(req.user._id);
     if (user.mcqSubmitted) {
@@ -90,8 +90,11 @@ exports.submitMCQ = async (req, res) => {
       { upsert: true, new: true }
     );
 
-    // Mark user as submitted
-    await User.findByIdAndUpdate(req.user._id, { mcqSubmitted: true });
+    // Mark user as submitted logic
+    await User.findByIdAndUpdate(req.user._id, { 
+      mcqSubmitted: true, 
+      ...(suspended && { isSuspended: true })
+    });
 
     res.json({ success: true, message: 'MCQ submitted successfully.' });
   } catch (err) {
