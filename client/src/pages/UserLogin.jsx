@@ -6,175 +6,157 @@ import { useAuth } from '../context/AuthContext'
 import VisionLogo from '../components/VisionLogo'
 
 export default function UserLogin() {
-  const [form, setForm]       = useState({ email: '', password: '' })
-  const [error, setError]     = useState('')
+  const [form, setForm] = useState({ email: '', password: '' })
+  const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const [showPass, setShowPass] = useState(false)
+  const [show, setShow] = useState(false)
   const { login } = useAuth()
   const navigate = useNavigate()
 
+  // Matrix code background decoration
+  const CodeBg = () => (
+    <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none' }}>
+      <div className="coding-bg">
+        {Array(20).fill('const handleLogin=async(req,res)=>{\n  const auth=req.headers.authorization;\n  if(!auth)return res.status(401);\n  try{\n    const dec=jwt.verify(auth,process.env.SEC);\n    req.user=dec;\n    next();\n  }catch(e){\n    return res.status(403);\n  }\n};\n\n').join('')}
+      </div>
+      <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, var(--surface) 0%, transparent 20%, transparent 80%, var(--surface) 100%)' }} />
+    </div>
+  )
+
   const set = (k, v) => { setError(''); setForm(p => ({ ...p, [k]: v })) }
 
-  const handleSubmit = async e => {
-    e.preventDefault()
-    setError('')
-    if (!form.email.trim() || !form.password.trim()) {
-      setError('Please fill in both fields.')
-      return
-    }
+  const submit = async e => {
+    e.preventDefault(); setError('')
+    if (!form.email.trim() || !form.password) { setError('Please enter your email and password.'); return }
     setLoading(true)
     try {
       const res = await api.post('/auth/login', form)
-      if (res.data.user.role === 'admin') {
-        setError('Use the Admin Login page for admin accounts.')
-        return
-      }
+      if (res.data.user.role === 'admin') { setError('Use the Admin Login for administrator accounts.'); return }
       login(res.data.token, res.data.user)
-      toast.success(`Welcome, ${res.data.user.name.split(' ')[0]}!`)
+      toast.success(`Welcome, ${res.data.user.name.split(' ')[0]}`)
       navigate('/dashboard')
     } catch (err) {
-      const msg = err.response?.data?.message || 'Invalid email or password.'
-      setError(msg)
-    } finally {
-      setLoading(false)
-    }
+      setError(err.response?.data?.message || 'Invalid email or password.')
+    } finally { setLoading(false) }
   }
 
   return (
-    <div className="min-h-screen bg-[#0b0f0c] flex">
+    <div className="page" style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
 
-      {/* ── Left panel ─────────────────────────────────────── */}
-      <div className="hidden lg:flex w-[45%] flex-col justify-between p-12 relative overflow-hidden"
-        style={{ background: 'linear-gradient(145deg, #0d1f12 0%, #0b1a10 50%, #091508 100%)' }}>
+      {/* Left panel - Glassy Feature Info */}
+      <div style={{ width: '45%', background: 'var(--surface)', borderRight: '1px solid var(--border)', padding: '3.5rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', position: 'relative', overflow: 'hidden' }}
+        className="hidden lg:flex">
 
-        {/* Grid overlay */}
-        <div className="absolute inset-0 opacity-20"
-          style={{
-            backgroundImage: 'linear-gradient(#00ff8812 1px, transparent 1px), linear-gradient(90deg, #00ff8812 1px, transparent 1px)',
-            backgroundSize: '40px 40px'
-          }} />
+        {/* Glow Effects & Animations */}
+        <CodeBg />
+        <div style={{ position: 'absolute', top: '-10%', left: '-10%', width: '60%', height: '60%', background: 'var(--gradient-glow)', filter: 'blur(100px)', opacity: 0.2, pointerEvents: 'none' }} />
 
-        {/* Glow blobs */}
-        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-80 h-80 rounded-full pointer-events-none"
-          style={{ background: 'radial-gradient(circle, #00ff8815 0%, transparent 65%)' }} />
-        <div className="absolute bottom-0 right-0 w-64 h-64 rounded-full pointer-events-none"
-          style={{ background: 'radial-gradient(circle, #f59e0b08 0%, transparent 65%)' }} />
+        <VisionLogo size="md" style={{ position: 'relative', zIndex: 10 }} />
 
-        {/* Top logo */}
-        <VisionLogo size="md" className="relative z-10" />
+        <div style={{ position: 'relative', zIndex: 10 }}>
+          <span className="badge" style={{ marginBottom: '1.5rem', background: 'var(--accent-dim)', color: '#fff', border: '1px solid var(--accent)' }}>Placement Assessment Platform</span>
+          <h1 style={{ fontSize: '2.5rem', fontWeight: 800, lineHeight: 1.1, color: 'var(--text-1)', letterSpacing: '-0.03em', marginBottom: '1.25rem' }}>
+            Vision CSE<br />Recruitment 2026
+          </h1>
+          <p style={{ color: 'var(--text-2)', fontSize: '1rem', lineHeight: 1.6, maxWidth: '340px' }}>
+            Demonstrate your programming skills in Advanced DSA, Full Stack Web Development, and Core CS Fundamentals.
+          </p>
 
-        {/* Center content */}
-        <div className="relative z-10 space-y-8">
-          <div>
-            <h1 className="text-4xl font-bold text-white leading-tight">
-              Vision CSE<br />
-              <span style={{ color: '#00ff88', textShadow: '0 0 30px #00ff8860' }}>
-                Recruitment
-              </span>
-            </h1>
-            <p className="text-gray-400 mt-4 text-base leading-relaxed max-w-xs">
-              Online Assessment Platform for selecting the brightest minds in Computer Science.
-            </p>
-          </div>
-
-          <div className="space-y-4">
+          <div style={{ marginTop: '3rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
             {[
-              { icon: '📝', title: 'MCQ Round', desc: '30 questions · +4/−1 scoring · 45 min' },
-              { icon: '💻', title: 'Coding Round', desc: '3 problems · Monaco editor · C/C++/Python/JS' },
-              { icon: '🔒', title: 'Proctored', desc: 'Tab detection · Auto-submit on timer' },
-            ].map(item => (
-              <div key={item.title} className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 text-base"
-                  style={{ background: '#00ff8810', border: '1px solid #00ff8820' }}>
-                  {item.icon}
-                </div>
+              ['Coding & Web-Dev Tracks', 'Solve complex algorithmic problems and modern Web-Dev queries.'],
+              ['Strict Proctored Environment', 'Browser lock & immediate tab-switch disqualification enabled.'],
+              ['Placement Guidance', 'Top performers secure prime spots in core campus recruitment.'],
+            ].map(([title, desc]) => (
+              <div key={title} style={{ display: 'flex', alignItems: 'flex-start', gap: '1rem' }}>
+                <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--accent)', marginTop: '0.4rem', flexShrink: 0, boxShadow: '0 0 12px var(--accent)' }} />
                 <div>
-                  <p className="text-sm font-semibold text-gray-200">{item.title}</p>
-                  <p className="text-xs text-gray-500">{item.desc}</p>
+                  <p style={{ color: 'var(--text-1)', fontWeight: 700, fontSize: '0.9375rem' }}>{title}</p>
+                  <p style={{ color: 'var(--text-3)', fontSize: '0.8125rem', marginTop: '0.125rem' }}>{desc}</p>
                 </div>
               </div>
             ))}
           </div>
         </div>
 
-        {/* Bottom */}
-        <p className="text-xs text-gray-600 font-mono relative z-10">
-          © Vision CSE Department · Recruitment 2024
+        <p style={{ color: 'var(--text-3)', fontSize: '0.75rem', fontFamily: 'JetBrains Mono,monospace', position: 'relative', zIndex: 10 }}>
+          © Vision CSE Department · 2026
         </p>
       </div>
 
-      {/* ── Right panel ─────────────────────────────────────── */}
-      <div className="flex-1 flex flex-col items-center justify-center px-6 py-12 relative">
+      {/* Right panel */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '2rem', position: 'relative', background: '#020402' }}>
 
-        {/* Mobile logo */}
-        <div className="lg:hidden mb-8">
-          <VisionLogo size="lg" />
-        </div>
+        <div style={{ position: 'absolute', bottom: '-10%', right: '-10%', width: '50%', height: '50%', background: 'var(--gradient-glow)', filter: 'blur(100px)', opacity: 0.4, pointerEvents: 'none' }} />
 
-        <div className="w-full max-w-md animate-fade-in">
-
-          <div className="mb-8">
-            <h2 className="text-2xl font-bold text-white font-mono">Candidate Login</h2>
-            <p className="text-gray-400 text-sm mt-1">
-              Sign in to access your assessment portal
-            </p>
+        <div style={{ width: '100%', maxWidth: '440px' }} className="animate-scale-in">
+          <div className="lg:hidden" style={{ marginBottom: '2.5rem', display: 'flex', justifyContent: 'center' }}>
+            <VisionLogo size="lg" />
           </div>
 
-          {error && (
-            <div className="mb-5 flex items-start gap-3 rounded-xl px-4 py-3 animate-fade-in"
-              style={{ background: '#ef444415', border: '1px solid #ef444435' }}>
-              <span className="text-red-400 text-base flex-shrink-0">⚠</span>
-              <p className="text-sm text-red-400 leading-snug">{error}</p>
-            </div>
-          )}
-
-          <form onSubmit={handleSubmit} className="space-y-5" noValidate>
-            <div>
-              <label className="input-label">Email Address</label>
-              <input
-                type="email" value={form.email}
-                onChange={e => set('email', e.target.value)}
-                className="input-field"
-                placeholder="your@email.com"
-                autoComplete="email" autoFocus
-              />
+          <div className="card">
+            <div style={{ marginBottom: '2rem', textAlign: 'center' }}>
+              <h2 style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--text-1)', letterSpacing: '-0.02em' }}>
+                Welcome Back
+              </h2>
+              <p style={{ color: 'var(--text-2)', fontSize: '0.9375rem', marginTop: '0.5rem' }}>
+                Candidate Login
+              </p>
             </div>
 
-            <div>
-              <label className="input-label">Password</label>
-              <div className="relative">
-                <input
-                  type={showPass ? 'text' : 'password'} value={form.password}
-                  onChange={e => set('password', e.target.value)}
-                  className="input-field pr-16"
-                  placeholder="••••••••"
-                  autoComplete="current-password"
-                />
-                <button type="button" onClick={() => setShowPass(p => !p)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-mono text-gray-500 hover:text-gray-300 transition-colors select-none">
-                  {showPass ? 'HIDE' : 'SHOW'}
-                </button>
+            {error && (
+              <div className="alert-error animate-slide-down" style={{ marginBottom: '1.5rem' }}>
+                <span style={{ fontSize: '1.125rem', lineHeight: 1 }}>⚠</span>
+                <span>{error}</span>
               </div>
+            )}
+
+            <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }} noValidate>
+              <div>
+                <label className="label">Email Address</label>
+                <input type="email" value={form.email} onChange={e => set('email', e.target.value)}
+                  className={`input ${error ? 'error' : ''}`} placeholder="you@university.edu"
+                  autoComplete="email" autoFocus />
+              </div>
+
+              <div>
+                <label className="label">Password</label>
+                <div style={{ position: 'relative' }}>
+                  <input type={show ? 'text' : 'password'} value={form.password} onChange={e => set('password', e.target.value)}
+                    className={`input ${error ? 'error' : ''}`} style={{ paddingRight: '4.5rem' }}
+                    placeholder="Enter your password" autoComplete="current-password" />
+                  <button type="button" onClick={() => setShow(p => !p)}
+                    style={{
+                      position: 'absolute', right: '1rem', top: '50%', transform: 'translateY(-50%)',
+                      background: 'none', border: 'none', color: 'var(--text-3)', cursor: 'pointer', fontSize: '0.75rem',
+                      fontWeight: 700, letterSpacing: '0.05em', fontFamily: 'JetBrains Mono,monospace', transition: 'color 0.2s'
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.color = 'var(--text-1)'}
+                    onMouseLeave={e => e.currentTarget.style.color = 'var(--text-3)'}>
+                    {show ? 'HIDE' : 'SHOW'}
+                  </button>
+                </div>
+              </div>
+
+              <button type="submit" disabled={loading} className="btn btn-primary" style={{ width: '100%', padding: '0.875rem', marginTop: '0.5rem', fontSize: '1rem' }}>
+                {loading ? <><Spin />Authenticating...</> : 'Launch Assessment Dashboard'}
+              </button>
+            </form>
+
+            <div style={{ marginTop: '2rem', paddingTop: '2rem', borderTop: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: '0.75rem', textAlign: 'center' }}>
+              <p style={{ color: 'var(--text-2)', fontSize: '0.875rem' }}>
+                New to Vision CSE?{' '}
+                <Link to="/register" style={{ color: 'var(--text-1)', fontWeight: 700, textDecoration: 'none', borderBottom: '2px solid var(--accent)' }}>
+                  Create an account
+                </Link>
+              </p>
+              <p style={{ color: 'var(--text-3)', fontSize: '0.8125rem', marginTop: '0.5rem' }}>
+                <Link to="/admin/login" style={{ color: 'var(--text-3)', textDecoration: 'none', transition: 'color 0.2s' }}
+                  onMouseEnter={e => e.currentTarget.style.color = 'var(--text-1)'} onMouseLeave={e => e.currentTarget.style.color = 'var(--text-3)'}>
+                  Administrator Login
+                </Link>
+              </p>
             </div>
-
-            <button type="submit" disabled={loading} className="btn-neon w-full py-3.5 text-sm">
-              {loading ? <><Spinner /> Signing in...</> : 'Sign In →'}
-            </button>
-          </form>
-
-          <div className="mt-6 pt-6 border-t border-gray-800 space-y-3">
-            <p className="text-sm text-gray-500 text-center">
-              New candidate?{' '}
-              <Link to="/register" className="font-semibold hover:underline" style={{ color: '#00ff88' }}>
-                Create account
-              </Link>
-            </p>
-            <p className="text-xs text-gray-600 text-center font-mono">
-              Are you an admin?{' '}
-              <Link to="/admin/login" className="text-yellow-500 hover:underline">
-                Admin Login →
-              </Link>
-            </p>
           </div>
         </div>
       </div>
@@ -182,9 +164,8 @@ export default function UserLogin() {
   )
 }
 
-const Spinner = () => (
-  <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
-    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+const Spin = () => (
+  <svg className="animate-spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+    <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
   </svg>
 )

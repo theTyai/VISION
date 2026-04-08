@@ -6,157 +6,121 @@ import { useAuth } from '../context/AuthContext'
 import VisionLogo from '../components/VisionLogo'
 
 export default function AdminLogin() {
-  const [form, setForm]       = useState({ email: '', password: '' })
-  const [error, setError]     = useState('')
+  const [form,    setForm]    = useState({ email:'', password:'' })
+  const [error,   setError]   = useState('')
   const [loading, setLoading] = useState(false)
-  const [showPass, setShowPass] = useState(false)
+  const [show,    setShow]    = useState(false)
   const { login } = useAuth()
-  const navigate = useNavigate()
+  const navigate  = useNavigate()
 
-  const set = (k, v) => { setError(''); setForm(p => ({ ...p, [k]: v })) }
+  const set = (k,v) => { setError(''); setForm(p=>({...p,[k]:v})) }
 
-  const handleSubmit = async e => {
-    e.preventDefault()
-    setError('')
-    if (!form.email.trim() || !form.password.trim()) {
-      setError('Please fill in both fields.')
-      return
-    }
+  const submit = async e => {
+    e.preventDefault(); setError('')
+    if (!form.email || !form.password) { setError('Both fields are required.'); return }
     setLoading(true)
     try {
       const res = await api.post('/auth/login', form)
-      if (res.data.user.role !== 'admin') {
-        setError('Access denied. This login is for administrators only.')
-        return
-      }
+      if (res.data.user.role !== 'admin') { setError('Access denied. This portal is for administrators only.'); return }
       login(res.data.token, res.data.user)
-      toast.success('Welcome, Admin!')
+      toast.success('Welcome, Admin')
+      document.documentElement.requestFullscreen().catch(() => {})
       navigate('/admin')
-    } catch (err) {
-      const msg = err.response?.data?.message || 'Invalid credentials.'
-      setError(msg)
-    } finally {
-      setLoading(false)
-    }
+    } catch(err) {
+      setError(err.response?.data?.message || 'Invalid credentials.')
+    } finally { setLoading(false) }
   }
 
   return (
-    <div className="min-h-screen bg-[#080c09] flex items-center justify-center px-4 relative overflow-hidden">
+    <div style={{minHeight:'100vh',background:'#0a0a0a',display:'flex',alignItems:'center',justifyContent:'center',padding:'1.5rem'}}>
 
-      {/* Background pattern */}
-      <div className="absolute inset-0"
-        style={{
-          backgroundImage: 'linear-gradient(#f59e0b08 1px, transparent 1px), linear-gradient(90deg, #f59e0b08 1px, transparent 1px)',
-          backgroundSize: '48px 48px'
-        }} />
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-64 pointer-events-none"
-        style={{ background: 'radial-gradient(ellipse, #f59e0b08 0%, transparent 70%)' }} />
+      <div style={{width:'100%',maxWidth:'420px'}} className="animate-fade-in">
 
-      <div className="relative w-full max-w-md animate-fade-in">
-
-        {/* Admin badge */}
-        <div className="flex justify-center mb-8">
-          <div className="flex flex-col items-center gap-4">
+        {/* Header */}
+        <div style={{textAlign:'center',marginBottom:'2.5rem'}}>
+          <div style={{display:'flex',justifyContent:'center',marginBottom:'1.5rem'}}>
             <VisionLogo size="lg" />
-            <div className="flex items-center gap-2 px-4 py-1.5 rounded-full"
-              style={{ background: '#f59e0b15', border: '1px solid #f59e0b30' }}>
-              <span className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" />
-              <span className="text-xs font-mono text-yellow-400 tracking-widest uppercase">
-                Administrator Access
-              </span>
-            </div>
+          </div>
+          <div style={{display:'inline-flex',alignItems:'center',gap:'0.5rem',
+            background:'#ffffff08',border:'1px solid #ffffff15',
+            borderRadius:'999px',padding:'0.3rem 0.875rem',marginBottom:'1rem'}}>
+            <div style={{width:6,height:6,borderRadius:'50%',background:'#f59e0b'}} />
+            <span style={{fontSize:'0.6875rem',fontWeight:700,letterSpacing:'0.08em',textTransform:'uppercase',color:'#a1a1a1'}}>
+              Administrator Access
+            </span>
           </div>
         </div>
 
         {/* Card */}
-        <div className="rounded-2xl p-8"
-          style={{
-            background: '#0f1a10',
-            border: '1px solid #f59e0b20',
-            boxShadow: '0 25px 60px #00000080, 0 0 0 1px #f59e0b10, 0 0 80px #f59e0b08'
-          }}>
+        <div style={{background:'#111',border:'1px solid #222',borderRadius:'16px',padding:'2rem',boxShadow:'0 8px 40px #00000080'}}>
 
-          <div className="mb-6">
-            <h2 className="text-xl font-mono font-bold text-white">Admin Panel Login</h2>
-            <p className="text-sm text-gray-500 mt-1">
+          <div style={{marginBottom:'1.75rem'}}>
+            <h2 style={{fontSize:'1.375rem',fontWeight:700,color:'#fff',letterSpacing:'-0.02em'}}>
+              Admin Sign In
+            </h2>
+            <p style={{color:'#555',fontSize:'0.875rem',marginTop:'0.375rem'}}>
               Restricted access — authorised personnel only
             </p>
           </div>
 
           {error && (
-            <div className="mb-5 flex items-start gap-3 rounded-xl px-4 py-3 animate-fade-in"
-              style={{ background: '#ef444415', border: '1px solid #ef444435' }}>
-              <span className="text-red-400 text-base flex-shrink-0">⚠</span>
-              <p className="text-sm text-red-400 leading-snug">{error}</p>
+            <div className="alert-error animate-fade-in" style={{marginBottom:'1.25rem'}}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{flexShrink:0,marginTop:'1px'}}>
+                <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+              </svg>
+              <span>{error}</span>
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-5" noValidate>
+          <form onSubmit={submit} style={{display:'flex',flexDirection:'column',gap:'1.125rem'}} noValidate>
             <div>
-              <label className="input-label" style={{ color: '#f59e0b99' }}>Admin Email</label>
-              <input
-                type="email" value={form.email}
-                onChange={e => set('email', e.target.value)}
-                className="input-field"
-                style={{ '--tw-ring-color': '#f59e0b40' }}
-                placeholder="admin@visioncse.com"
-                autoComplete="email" autoFocus
-              />
+              <label className="label">Admin Email</label>
+              <input type="email" value={form.email} onChange={e=>set('email',e.target.value)}
+                className={`input ${error?'error':''}`} placeholder="admin@visioncse.com"
+                autoComplete="email" autoFocus />
             </div>
 
             <div>
-              <label className="input-label" style={{ color: '#f59e0b99' }}>Password</label>
-              <div className="relative">
-                <input
-                  type={showPass ? 'text' : 'password'} value={form.password}
-                  onChange={e => set('password', e.target.value)}
-                  className="input-field pr-16"
-                  placeholder="••••••••"
-                  autoComplete="current-password"
-                />
-                <button type="button" onClick={() => setShowPass(p => !p)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-mono text-gray-500 hover:text-gray-300 transition-colors select-none">
-                  {showPass ? 'HIDE' : 'SHOW'}
+              <label className="label">Password</label>
+              <div style={{position:'relative'}}>
+                <input type={show?'text':'password'} value={form.password} onChange={e=>set('password',e.target.value)}
+                  className={`input ${error?'error':''}`} style={{paddingRight:'4.5rem'}}
+                  placeholder="Enter password" autoComplete="current-password" />
+                <button type="button" onClick={()=>setShow(p=>!p)}
+                  style={{position:'absolute',right:'0.875rem',top:'50%',transform:'translateY(-50%)',
+                    background:'none',border:'none',color:'#555',cursor:'pointer',fontSize:'0.75rem',
+                    fontWeight:600,letterSpacing:'0.04em'}}>
+                  {show?'HIDE':'SHOW'}
                 </button>
               </div>
             </div>
 
-            <button
-              type="submit" disabled={loading}
-              className="w-full py-3.5 rounded-xl font-mono font-bold text-sm transition-all flex items-center justify-center gap-2"
-              style={{
-                background: loading ? '#92400e60' : 'linear-gradient(135deg, #f59e0b, #d97706)',
-                color: '#0b0f0c',
-                boxShadow: loading ? 'none' : '0 4px 20px #f59e0b30',
-                cursor: loading ? 'not-allowed' : 'pointer',
-                opacity: loading ? 0.7 : 1,
-              }}
-            >
-              {loading ? <><Spinner />Verifying...</> : '⚙ Enter Admin Panel'}
+            <button type="submit" disabled={loading} className="btn btn-primary"
+              style={{width:'100%',padding:'0.875rem',marginTop:'0.25rem',fontSize:'0.9375rem'}}>
+              {loading ? <><Spin/>Verifying...</> : 'Sign In to Admin Panel'}
             </button>
           </form>
 
-          <div className="mt-6 pt-5 border-t border-gray-800">
-            <p className="text-xs text-gray-600 font-mono text-center">
+          <div style={{marginTop:'1.5rem',paddingTop:'1.5rem',borderTop:'1px solid #1a1a1a',textAlign:'center'}}>
+            <p style={{color:'#333',fontSize:'0.8125rem'}}>
               Not an admin?{' '}
-              <Link to="/login" className="text-neon hover:underline">
-                Candidate Login →
+              <Link to="/login" style={{color:'#666',textDecoration:'none'}}>
+                Candidate login
               </Link>
             </p>
           </div>
         </div>
 
-        <p className="text-center text-gray-700 text-xs font-mono mt-6">
-          © Vision CSE · Admin Portal · Authorised Use Only
+        <p style={{textAlign:'center',color:'#2a2a2a',fontSize:'0.75rem',fontFamily:'monospace',marginTop:'1.5rem'}}>
+          Vision CSE · Admin Portal · Authorised Use Only
         </p>
       </div>
     </div>
   )
 }
 
-const Spinner = () => (
-  <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
-    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+const Spin = () => (
+  <svg className="animate-spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+    <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
   </svg>
 )

@@ -2,342 +2,481 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'react-hot-toast'
 import api from '../services/api'
-import Timer from '../components/Timer'
-import QuestionNavigator from '../components/QuestionNavigator'
+import { useAuth } from '../context/AuthContext'
 import VisionLogo from '../components/VisionLogo'
 
-const MCQTest = () => {
-  const [questions, setQuestions] = useState([])
-  const [answers, setAnswers] = useState({})
-  const [current, setCurrent] = useState(0)
-  const [loading, setLoading] = useState(true)
-  const [submitting, setSubmitting] = useState(false)
-  const [submitted, setSubmitted] = useState(false)
-  const [showConfirm, setShowConfirm] = useState(false)
-  const [duration] = useState(45 * 60)
-  const [isFullscreen, setIsFullscreen] = useState(false)
-  const navigate = useNavigate()
-  const saveIntervalRef = useRef(null)
-  const tabWarningsRef = useRef(0)
+// ── Timer ─────────────────────────────────────────────────────────────────────
+function Timer({ secs, onExpire }) {
+  const [left, setLeft] = useState(secs)
+  const firedRef = useRef(false)
 
-  // Anti-cheat: Tab switch detection
+  useEffect(() => { setLeft(secs); firedRef.current = false }, [secs])
   useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.hidden && !submitted) {
-        tabWarningsRef.current++
-        toast.error(`⚠ Tab switch detected! Warning ${tabWarningsRef.current}/3`, { duration: 4000 })
-        if (tabWarningsRef.current >= 3) {
-          toast.error('Auto-submitting due to multiple tab violations!', { duration: 5000 })
-          setTimeout(() => submitMCQ(true), 2000)
+    const id = setInterval(() => setLeft(p => {
+      if (p <= 1) { clearInterval(id); if (!firedRef.current) { firedRef.current=true; onExpire?.() } return 0 }
+      return p - 1
+    }), 1000)
+    return () => clearInterval(id)
+  }, [secs])
+
+  const m   = Math.floor(left / 60)
+  const s   = left % 60
+  const pct = Math.max(0, (left / secs) * 100)
+  const isDanger  = left <= 60
+  const isWarning = left <= 300 && left > 60
+  const color = isDanger ? '#ef4444' : isWarning ? '#f59e0b' : '#fff'
+
+  return (
+    <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:'4px',minWidth:100}}>
+      <div style={{display:'flex',alignItems:'center',gap:'6px'}}>
+        <div style={{width:6,height:6,borderRadius:'50%',background:color,animation:isDanger?'countdownPulse 0.8s infinite':'none'}} />
+        <span style={{fontFamily:'JetBrains Mono,monospace',fontWeight:700,fontSize:'1.25rem',color,letterSpacing:'-0.02em',
+          animation:isDanger?'countdownPulse 0.8s infinite':'none'}}>
+          {String(m).padStart(2,'0')}:{String(s).padStart(2,'0')}
+        </span>
+      </div>
+      <div style={{width:100,height:3,background:'#1a1a1a',borderRadius:99,overflow:'hidden'}}>
+        <div style={{height:'100%',background:color,borderRadius:99,width:`${pct}%`,transition:'width 1s linear'}} />
+      </div>
+    </div>
+  )
+}
+
+// ── Question Navigator ────────────────────────────────────────────────────────
+function Navigator({ questions, answers, current, onGo }) {
+  const answered = Object.values(answers).filter(v => v !== undefined && v !== -1).length
+  return (
+    <div style={{display:'flex',flexDirection:'column',gap:'1.25rem'}}>
+      <div>
+        <p style={{fontSize:'0.6875rem',fontWeight:700,color:'#444',letterSpacing:'0.06em',textTransform:'uppercase',marginBottom:'0.875rem'}}>
+          Question Map
+        </p>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:'6px'}}>
+          {questions.map((q, i) => {
+            const isAnswered = answers[q._id] !== undefined && answers[q._id] !== -1
+            const isCurrent  = i === current
+            return (
+              <button key={i} onClick={() => onGo(i)}
+                style={{
+                  aspectRatio:'1',borderRadius:8,border:'none',cursor:'pointer',
+                  fontFamily:'JetBrains Mono,monospace',fontWeight:600,fontSize:'0.75rem',
+                  transition:'all 0.12s',
+                  background: isCurrent ? '#fff' : isAnswered ? '#ffffff15' : '#1a1a1a',
+                  color: isCurrent ? '#000' : isAnswered ? '#fff' : '#444',
+                  outline: isCurrent ? '2px solid #fff' : isAnswered ? '1px solid #ffffff30' : '1px solid #222',
+                  outlineOffset: isCurrent ? '2px' : 0,
+                }}>
+                {i+1}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Legend */}
+      <div style={{display:'flex',flexDirection:'column',gap:'0.5rem'}}>
+        {[
+          {color:'#fff',label:`Answered (${answered})`},
+          {color:'#1a1a1a',outline:'1px solid #222',label:`Not answered (${questions.length - answered})`},
+        ].map(({color,outline,label}) => (
+          <div key={label} style={{display:'flex',alignItems:'center',gap:'0.5rem'}}>
+            <div style={{width:12,height:12,borderRadius:3,background:color,border:outline||'1px solid #333',flexShrink:0}} />
+            <span style={{fontSize:'0.75rem',color:'#555'}}>{label}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Progress */}
+      <div>
+        <div style={{display:'flex',justifyContent:'space-between',marginBottom:'0.375rem'}}>
+          <span style={{fontSize:'0.6875rem',color:'#444',fontWeight:600,letterSpacing:'0.04em',textTransform:'uppercase'}}>Progress</span>
+          <span style={{fontSize:'0.6875rem',color:'#a1a1a1',fontFamily:'monospace'}}>{Math.round(answered/questions.length*100)}%</span>
+        </div>
+        <div style={{height:3,background:'#1a1a1a',borderRadius:99,overflow:'hidden'}}>
+          <div style={{height:'100%',background:'#fff',borderRadius:99,transition:'width 0.4s ease',width:`${answered/questions.length*100}%`}} />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Submit Modal ──────────────────────────────────────────────────────────────
+function SubmitModal({ open, questions, answers, onConfirm, onCancel, submitting }) {
+  if (!open) return null
+  const answered = Object.values(answers).filter(v => v !== undefined && v !== -1).length
+  const unanswered = questions.length - answered
+
+  return (
+    <div className="modal-backdrop">
+      <div className="modal animate-scale-in">
+        <h3 style={{fontSize:'1.0625rem',fontWeight:700,color:'#fff',letterSpacing:'-0.01em',marginBottom:'0.5rem'}}>Submit Assessment</h3>
+        <p style={{color:'#555',fontSize:'0.875rem',marginBottom:'1.5rem'}}>Review your attempt summary before submitting.</p>
+
+        <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'0.75rem',marginBottom:'1.25rem'}}>
+          {[
+            ['Answered', answered, '#fff'],
+            ['Skipped', unanswered, '#555'],
+            ['Total', questions.length, '#a1a1a1'],
+          ].map(([label,value,color]) => (
+            <div key={label} style={{background:'#0f0f0f',border:'1px solid #1a1a1a',borderRadius:10,padding:'0.875rem',textAlign:'center'}}>
+              <p style={{fontSize:'1.25rem',fontWeight:800,color,fontFamily:'JetBrains Mono,monospace'}}>{value}</p>
+              <p style={{fontSize:'0.6875rem',color:'#444',fontWeight:600,letterSpacing:'0.04em',textTransform:'uppercase',marginTop:'0.25rem'}}>{label}</p>
+            </div>
+          ))}
+        </div>
+
+        {unanswered > 0 && (
+          <div className="alert-warn" style={{marginBottom:'1.25rem',fontSize:'0.8125rem'}}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{flexShrink:0,marginTop:1}}>
+              <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+            <span>{unanswered} unanswered question{unanswered !== 1 ? 's' : ''} will receive zero marks. This action is irreversible.</span>
+          </div>
+        )}
+
+        <div style={{display:'flex',gap:'0.75rem'}}>
+          <button onClick={onCancel} disabled={submitting} className="btn btn-ghost" style={{flex:1}}>Cancel</button>
+          <button onClick={onConfirm} disabled={submitting} className="btn btn-primary" style={{flex:1}}>
+            {submitting ? <><Spin/>Submitting...</> : 'Confirm Submit'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Main MCQTest ──────────────────────────────────────────────────────────────
+export default function MCQTest() {
+  const { user } = useAuth()
+  const navigate  = useNavigate()
+  const [questions,  setQuestions]  = useState([])
+  const [answers,    setAnswers]    = useState({})
+  const [current,    setCurrent]    = useState(0)
+  const [loading,    setLoading]    = useState(true)
+  const [submitting, setSubmitting] = useState(false)
+  const [submitted,  setSubmitted]  = useState(false)
+  const [showSubmit, setShowSubmit] = useState(false)
+  const [duration,   setDuration]   = useState(45*60)
+  const [localSuspended, setLocalSuspended] = useState(false)
+  const tabWarnings  = useRef(0)
+  const saveTimer    = useRef(null)
+  const autoSubmitRef= useRef(false)
+
+  // ── Anti-cheat: tab switch ────────────────────────────────────────────────
+  useEffect(() => {
+    document.documentElement.requestFullscreen().catch(() => {})
+
+    const onHide = async () => {
+      if (document.hidden && !autoSubmitRef.current) {
+        tabWarnings.current++
+        const count = tabWarnings.current
+        try { await api.post('/admin/notify/tab-violation', { userId: user?.id, count }) } catch {}
+
+        if (count >= 1) {
+          toast.error('Tab switch or unfocus detected. You have been disqualified and the test submitted.', { duration: 6000 })
+          autoSubmitRef.current = true
+          setTimeout(() => doSubmit(true), 2000)
         }
       }
     }
+    document.addEventListener('visibilitychange', onHide)
+    document.addEventListener('contextmenu', e => e.preventDefault())
+    return () => { document.removeEventListener('visibilitychange', onHide) }
+  }, [])
 
-    const handleContextMenu = (e) => e.preventDefault()
-    const handleKeyDown = (e) => {
-      if (e.key === 'F5' || (e.ctrlKey && e.key === 'r')) e.preventDefault()
-      if (e.ctrlKey && ['c', 'v', 'u', 'a'].includes(e.key)) e.preventDefault()
-    }
-
-    document.addEventListener('visibilitychange', handleVisibilityChange)
-    document.addEventListener('contextmenu', handleContextMenu)
-    document.addEventListener('keydown', handleKeyDown)
-
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange)
-      document.removeEventListener('contextmenu', handleContextMenu)
-      document.removeEventListener('keydown', handleKeyDown)
-    }
-  }, [submitted])
-
-  // Fetch questions
+  // ── Block F5 / Ctrl+R ─────────────────────────────────────────────────────
   useEffect(() => {
-    const load = async () => {
+    const fn = e => {
+      if (e.key==='F5' || (e.ctrlKey && e.key==='r') || (e.ctrlKey && e.key==='R')) e.preventDefault()
+    }
+    document.addEventListener('keydown', fn)
+    return () => document.removeEventListener('keydown', fn)
+  }, [])
+
+  // ── Load questions ────────────────────────────────────────────────────────
+  useEffect(() => {
+    ;(async () => {
       try {
-        const res = await api.get('/mcq/questions')
-        setQuestions(res.data.questions)
-        if (res.data.savedAnswers) {
-          setAnswers(res.data.savedAnswers)
-        }
+        const [qRes, cfgRes] = await Promise.all([
+          api.get('/mcq/questions'),
+          api.get('/admin/config').catch(() => ({ data: { config: null } }))
+        ])
+        setQuestions(qRes.data.questions)
+        if (qRes.data.savedAnswers) setAnswers(qRes.data.savedAnswers)
+        if (cfgRes.data.config?.mcqDuration) setDuration(cfgRes.data.config.mcqDuration * 60)
       } catch (err) {
         toast.error(err.response?.data?.message || 'Failed to load questions')
         navigate('/dashboard')
-      } finally {
-        setLoading(false)
-      }
-    }
-    load()
+      } finally { setLoading(false) }
+    })()
   }, [])
 
-  // Auto-save every 30 seconds
+  // ── Auto-save every 30s ───────────────────────────────────────────────────
   useEffect(() => {
-    if (questions.length === 0) return
-    saveIntervalRef.current = setInterval(() => {
-      if (!submitted) saveAnswers()
-    }, 30000)
-    return () => clearInterval(saveIntervalRef.current)
+    if (!questions.length || submitted) return
+    saveTimer.current = setInterval(() => saveAnswers(answers), 30000)
+    return () => clearInterval(saveTimer.current)
   }, [answers, questions, submitted])
 
-  const saveAnswers = async () => {
-    try {
-      await api.post('/mcq/save', { answers })
-    } catch { /* silent fail */ }
+  const saveAnswers = async (ans) => {
+    try { await api.post('/mcq/save', { answers: ans }) } catch {}
   }
 
-  const handleAnswer = (qId, optionIndex) => {
-    setAnswers(prev => ({ ...prev, [qId]: optionIndex }))
-  }
-
-  const submitMCQ = useCallback(async (auto = false) => {
+  const doSubmit = useCallback(async (auto = false) => {
     if (submitted || submitting) return
     setSubmitting(true)
+    setShowSubmit(false)
+    if (auto) setLocalSuspended(true)
     try {
-      await api.post('/mcq/submit', { answers })
+      await saveAnswers(answers)
+      await api.post('/mcq/submit', { answers, suspended: auto })
       setSubmitted(true)
-      toast.success(auto ? 'Time up! MCQ submitted automatically.' : 'MCQ submitted successfully!')
-      setTimeout(() => navigate('/dashboard'), 2000)
+      toast.success(auto ? 'Suspended due to test violations.' : 'Assessment submitted successfully.')
+      setTimeout(() => navigate('/dashboard'), 2500)
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Submission failed')
+      toast.error(err.response?.data?.message || 'Submission failed. Please try again.')
       setSubmitting(false)
     }
   }, [answers, submitted, submitting])
 
-  const handleTimerExpire = () => submitMCQ(true)
-
-  const enterFullscreen = () => {
-    document.documentElement.requestFullscreen?.()
-    setIsFullscreen(true)
+  const handleAnswer = (qId, idx) => {
+    setAnswers(p => {
+      const next = { ...p, [qId]: idx }
+      return next
+    })
   }
 
   if (loading) return (
-    <div className="min-h-screen bg-bg flex items-center justify-center">
-      <div className="text-neon font-mono animate-pulse text-lg">[ LOADING QUESTIONS... ]</div>
+    <div style={{minHeight:'100vh',background:'#0a0a0a',display:'flex',alignItems:'center',justifyContent:'center'}}>
+      <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:'1rem'}}>
+        <div style={{width:28,height:28,border:'2px solid #222',borderTopColor:'#fff',borderRadius:'50%'}} className="animate-spin" />
+        <p style={{color:'#333',fontSize:'0.8125rem',fontFamily:'monospace'}}>Loading questions...</p>
+      </div>
     </div>
   )
 
   if (submitted) return (
-    <div className="min-h-screen bg-bg flex items-center justify-center">
-      <div className="text-center animate-fade-in">
-        <div className="text-6xl mb-4">✅</div>
-        <h2 className="text-2xl font-mono neon-text font-bold mb-2">MCQ SUBMITTED</h2>
-        <p className="text-gray-400 font-mono">Redirecting to dashboard...</p>
+    <div style={{minHeight:'100vh',background:'transparent',display:'flex',alignItems:'center',justifyContent:'center'}}>
+      <div style={{textAlign:'center',maxWidth:400,padding:'2rem'}} className="animate-fade-in card">
+        <div style={{width:56,height:56,borderRadius:'50%',
+          background: localSuspended ? 'rgba(244,63,94,0.15)' : '#ffffff10',
+          border: `1px solid ${localSuspended ? 'rgba(244,63,94,0.4)' : 'rgba(255,255,255,0.2)'}`,
+          display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 1.5rem',
+          boxShadow: localSuspended ? '0 0 20px rgba(244,63,94,0.2)' : 'none'}}>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={localSuspended ? '#f43f5e' : '#fff'} strokeWidth="2.5">
+            {localSuspended 
+              ? <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/> 
+              : <><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22,4 12,14.01 9,11.01"/></>}
+          </svg>
+        </div>
+        <h2 style={{fontSize:'1.375rem',fontWeight:700,color: localSuspended ? '#f43f5e' : '#fff',letterSpacing:'-0.02em',marginBottom:'0.625rem'}}>
+          {localSuspended ? 'Assessment Suspended' : 'Assessment Submitted'}
+        </h2>
+        <p style={{color: localSuspended ? '#fca5a5' : 'var(--text-2)',fontSize:'0.9375rem',lineHeight:1.6,marginBottom:'1.5rem'}}>
+          {localSuspended 
+            ? 'Your account has been permanently flagged for tab-switching violations and your session was terminated.' 
+            : 'Your responses have been recorded. Results will be reviewed by the admin and are not visible to candidates.'}
+        </p>
+        <p style={{color:'var(--text-3)',fontSize:'0.8125rem',fontFamily:'monospace'}}>Redirecting to dashboard...</p>
       </div>
     </div>
   )
 
   const q = questions[current]
-  const answeredCount = Object.values(answers).filter(v => v !== undefined && v !== -1).length
+  const answered = Object.values(answers).filter(v => v !== undefined && v !== -1).length
 
   return (
-    <div className="min-h-screen bg-bg flex flex-col select-none" onContextMenu={e => e.preventDefault()}>
-      {/* Top Bar */}
-      <div className="bg-card border-b border-gray-800 sticky top-0 z-40 px-4 py-3"
-        style={{ boxShadow: '0 2px 20px #00ff8810' }}>
-        <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
+    <div style={{minHeight:'100vh',background:'#0a0a0a',display:'flex',flexDirection:'column'}}
+      onContextMenu={e=>e.preventDefault()}>
+
+      {/* ── Header ── */}
+      <header style={{position:'sticky',top:0,zIndex:50,background:'#0a0a0a',borderBottom:'1px solid #1a1a1a'}}>
+        <div style={{maxWidth:1280,margin:'0 auto',padding:'0 1.5rem',height:56,
+          display:'flex',alignItems:'center',justifyContent:'space-between',gap:'1rem'}}>
           <VisionLogo size="sm" />
 
-          <div className="flex flex-col items-center">
-            <span className="text-xs font-mono text-gray-500 uppercase tracking-wider">MCQ Round</span>
-            <span className="text-sm font-mono text-textPrimary">
-              Q{current + 1} / {questions.length}
+          <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:'2px'}}>
+            <span style={{fontSize:'0.6875rem',color:'#444',fontWeight:600,letterSpacing:'0.06em',textTransform:'uppercase'}}>
+              MCQ Assessment
             </span>
+            <div style={{display:'flex',alignItems:'center',gap:'1rem'}}>
+              <span style={{fontFamily:'JetBrains Mono,monospace',fontSize:'0.8125rem',color:'#a1a1a1'}}>
+                {current+1} / {questions.length}
+              </span>
+              <span style={{color:'#222'}}>|</span>
+              <span style={{fontFamily:'JetBrains Mono,monospace',fontSize:'0.8125rem',color:'#555'}}>
+                {answered} answered
+              </span>
+            </div>
           </div>
 
-          <Timer durationSeconds={duration} onExpire={handleTimerExpire} />
+          <Timer secs={duration} onExpire={() => doSubmit(true)} />
         </div>
 
         {/* Progress bar */}
-        <div className="max-w-7xl mx-auto mt-2">
-          <div className="h-1 bg-gray-800 rounded-full overflow-hidden">
-            <div className="h-full bg-gradient-to-r from-neon to-accent transition-all duration-500"
-              style={{ width: `${(answeredCount / questions.length) * 100}%` }} />
-          </div>
+        <div style={{height:2,background:'#111'}}>
+          <div style={{height:'100%',background:'#fff',transition:'width 0.4s ease',width:`${answered/questions.length*100}%`}} />
         </div>
-      </div>
+      </header>
 
-      {/* Fullscreen Warning */}
-      {!isFullscreen && (
-        <div className="bg-yellow-500/10 border-b border-yellow-500/30 px-4 py-2 flex items-center justify-between">
-          <span className="text-yellow-400 text-xs font-mono">⚠ Fullscreen mode recommended for best experience</span>
-          <button onClick={enterFullscreen} className="text-xs btn-outline py-1 px-3">
-            ENTER FULLSCREEN
-          </button>
+      {/* Tab warning banner */}
+      {tabWarnings.current > 0 && (
+        <div style={{background:'#1a0000',borderBottom:'1px solid #ef444430',padding:'0.625rem 1.5rem',
+          display:'flex',alignItems:'center',justifyContent:'center',gap:'0.5rem'}}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f87171" strokeWidth="2">
+            <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+          </svg>
+          <span style={{fontSize:'0.8125rem',color:'#f87171',fontWeight:500}}>
+            Tab violation — {tabWarnings.current}/3 warnings. {3 - tabWarnings.current} remaining before auto-submit.
+          </span>
         </div>
       )}
 
-      <div className="flex-1 max-w-7xl mx-auto w-full px-4 py-6 flex gap-6">
-        {/* Question Area */}
-        <div className="flex-1 flex flex-col gap-5">
+      {/* ── Body ── */}
+      <div style={{flex:1,maxWidth:1280,margin:'0 auto',width:'100%',padding:'1.5rem',display:'flex',gap:'1.5rem',alignItems:'flex-start'}}>
+
+        {/* Question */}
+        <main style={{flex:1,minWidth:0}}>
           {q && (
-            <div className="card neon-border animate-fade-in flex-1">
-              {/* Question header */}
-              <div className="flex items-center gap-3 mb-5 pb-4 border-b border-gray-800">
-                <div className="w-9 h-9 rounded-lg bg-neon/10 border border-neon/30 flex items-center justify-center">
-                  <span className="text-neon font-mono font-bold text-sm">{current + 1}</span>
+            <div style={{background:'#111',border:'1px solid #1a1a1a',borderRadius:14,overflow:'hidden'}} className="animate-fade-in">
+
+              {/* Q header */}
+              <div style={{padding:'1.25rem 1.5rem',borderBottom:'1px solid #1a1a1a',background:'#0f0f0f',
+                display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                <div style={{display:'flex',alignItems:'center',gap:'0.875rem'}}>
+                  <div style={{width:32,height:32,borderRadius:8,background:'#1a1a1a',border:'1px solid #222',
+                    display:'flex',alignItems:'center',justifyContent:'center',
+                    fontFamily:'JetBrains Mono,monospace',fontWeight:700,fontSize:'0.8125rem',color:'#fff',flexShrink:0}}>
+                    {current+1}
+                  </div>
+                  <span style={{fontSize:'0.6875rem',color:'#444',fontWeight:600,letterSpacing:'0.06em',textTransform:'uppercase'}}>
+                    Question {current+1} of {questions.length}
+                  </span>
                 </div>
-                <div>
-                  <span className="text-xs font-mono text-gray-500 uppercase">Question {current + 1} of {questions.length}</span>
-                  {answers[q._id] !== undefined && answers[q._id] !== -1 && (
-                    <span className="ml-2 text-xs font-mono text-neon">✓ Answered</span>
-                  )}
-                </div>
+                {answers[q._id] !== undefined && answers[q._id] !== -1 && (
+                  <div style={{display:'flex',alignItems:'center',gap:'0.375rem'}}>
+                    <div className="dot dot-done" />
+                    <span style={{fontSize:'0.75rem',color:'#a1a1a1',fontWeight:500}}>Answered</span>
+                  </div>
+                )}
               </div>
 
-              {/* Question text */}
-              <p className="text-textPrimary text-base leading-relaxed mb-5 font-sans">
-                {q.questionText}
-              </p>
+              {/* Q content */}
+              <div style={{padding:'1.5rem'}}>
+                <p style={{fontSize:'1rem',color:'#e5e5e5',lineHeight:1.75,marginBottom:'1.5rem',fontWeight:400}}>
+                  {q.questionText}
+                </p>
 
-              {/* Question image */}
-              {q.questionImage && (
-                <div className="mb-5 rounded-lg overflow-hidden border border-gray-700">
-                  <img src={q.questionImage} alt="Question" className="max-w-full max-h-64 object-contain mx-auto" />
+                {q.questionImage && (
+                  <div style={{marginBottom:'1.5rem',borderRadius:10,overflow:'hidden',border:'1px solid #222',background:'#0f0f0f',
+                    display:'flex',alignItems:'center',justifyContent:'center',padding:'1rem'}}>
+                    <img src={`http://localhost:5000${q.questionImage}`} alt="Question"
+                      style={{maxWidth:'100%',maxHeight:320,objectFit:'contain',borderRadius:6}} />
+                  </div>
+                )}
+
+                {/* Options */}
+                <div style={{display:'flex',flexDirection:'column',gap:'0.625rem'}}>
+                  {q.options.map((opt, i) => {
+                    const isSelected = answers[q._id] === i
+                    return (
+                      <button key={i} onClick={() => handleAnswer(q._id, i)}
+                        style={{
+                          display:'flex',alignItems:'center',gap:'1rem',
+                          padding:'1rem 1.25rem',borderRadius:10,cursor:'pointer',
+                          border: isSelected ? '1px solid #fff' : '1px solid #1a1a1a',
+                          background: isSelected ? '#ffffff10' : '#0f0f0f',
+                          textAlign:'left',transition:'all 0.12s',
+                        }}
+                        onMouseEnter={e=>{ if(!isSelected) { e.currentTarget.style.borderColor='#333'; e.currentTarget.style.background='#141414' } }}
+                        onMouseLeave={e=>{ if(!isSelected) { e.currentTarget.style.borderColor='#1a1a1a'; e.currentTarget.style.background='#0f0f0f' } }}>
+                        <div style={{
+                          width:22,height:22,borderRadius:'50%',flexShrink:0,
+                          border: isSelected ? '2px solid #fff' : '1px solid #333',
+                          background: isSelected ? '#fff' : 'transparent',
+                          display:'flex',alignItems:'center',justifyContent:'center',transition:'all 0.12s'
+                        }}>
+                          {isSelected && <div style={{width:8,height:8,borderRadius:'50%',background:'#000'}} />}
+                        </div>
+                        <span style={{fontFamily:'JetBrains Mono,monospace',fontSize:'0.75rem',
+                          color: isSelected ? '#fff' : '#555', fontWeight:700, flexShrink:0}}>
+                          {String.fromCharCode(65+i)}
+                        </span>
+                        <span style={{fontSize:'0.9375rem',color: isSelected ? '#fff' : '#a1a1a1',lineHeight:1.5}}>
+                          {opt}
+                        </span>
+                      </button>
+                    )
+                  })}
                 </div>
-              )}
 
-              {/* Options */}
-              <div className="space-y-3">
-                {q.options.map((opt, i) => {
-                  const isSelected = answers[q._id] === i
-                  return (
-                    <button
-                      key={i}
-                      onClick={() => handleAnswer(q._id, i)}
-                      className={`w-full text-left p-4 rounded-xl border transition-all duration-200 flex items-center gap-3 ${
-                        isSelected
-                          ? 'border-neon bg-neon/10 text-textPrimary shadow-[0_0_15px_#00ff8820]'
-                          : 'border-gray-700 bg-bg hover:border-gray-500 text-gray-300 hover:bg-gray-800/50'
-                      }`}
-                    >
-                      <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all ${
-                        isSelected ? 'border-neon bg-neon' : 'border-gray-600'
-                      }`}>
-                        {isSelected && <div className="w-2 h-2 rounded-full bg-bg" />}
-                      </div>
-                      <span className="font-mono text-xs text-gray-500 flex-shrink-0">
-                        {String.fromCharCode(65 + i)}.
-                      </span>
-                      <span className="text-sm">{opt}</span>
-                    </button>
-                  )
-                })}
+                {answers[q._id] !== undefined && answers[q._id] !== -1 && (
+                  <button onClick={() => { const n={...answers}; delete n[q._id]; setAnswers(n) }}
+                    style={{marginTop:'1rem',background:'none',border:'none',color:'#444',cursor:'pointer',
+                      fontSize:'0.8125rem',display:'flex',alignItems:'center',gap:'0.375rem',transition:'color 0.1s'}}
+                    onMouseEnter={e=>e.currentTarget.style.color='#f87171'}
+                    onMouseLeave={e=>e.currentTarget.style.color='#444'}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                    Clear response
+                  </button>
+                )}
               </div>
 
-              {/* Clear button */}
-              {answers[q._id] !== undefined && answers[q._id] !== -1 && (
-                <button
-                  onClick={() => {
-                    const newAns = { ...answers }
-                    delete newAns[q._id]
-                    setAnswers(newAns)
-                  }}
-                  className="mt-4 text-xs text-gray-500 hover:text-red-400 font-mono transition-colors"
-                >
-                  ✕ Clear Response
+              {/* Navigation */}
+              <div style={{padding:'1rem 1.5rem',borderTop:'1px solid #1a1a1a',background:'#0f0f0f',
+                display:'flex',alignItems:'center',justifyContent:'space-between',gap:'0.75rem'}}>
+                <button onClick={() => setCurrent(p => Math.max(0, p-1))} disabled={current===0}
+                  className="btn btn-ghost" style={{minWidth:96}}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M15 18l-6-6 6-6"/></svg>
+                  Previous
                 </button>
-              )}
+
+                {current < questions.length - 1 ? (
+                  <button onClick={() => setCurrent(p => Math.min(questions.length-1, p+1))}
+                    className="btn btn-primary" style={{minWidth:96}}>
+                    Next
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M9 18l6-6-6-6"/></svg>
+                  </button>
+                ) : (
+                  <button onClick={() => setShowSubmit(true)} disabled={submitting}
+                    className="btn btn-primary" style={{minWidth:120}}>
+                    Submit Test
+                  </button>
+                )}
+              </div>
             </div>
           )}
+        </main>
 
-          {/* Navigation */}
-          <div className="flex items-center justify-between gap-3">
-            <button
-              onClick={() => setCurrent(Math.max(0, current - 1))}
-              disabled={current === 0}
-              className="btn-outline px-5 py-2 text-sm disabled:opacity-30 disabled:cursor-not-allowed"
-            >
-              ← PREV
-            </button>
-
-            <div className="flex items-center gap-2 text-xs font-mono text-gray-500">
-              <span>{answeredCount}/{questions.length} answered</span>
-            </div>
-
-            {current < questions.length - 1 ? (
-              <button
-                onClick={() => setCurrent(Math.min(questions.length - 1, current + 1))}
-                className="btn-neon px-5 py-2 text-sm"
-              >
-                NEXT →
-              </button>
-            ) : (
-              <button
-                onClick={() => setShowConfirm(true)}
-                className="btn-neon px-5 py-2 text-sm"
-                style={{ background: '#22c55e' }}
-              >
-                SUBMIT TEST
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Right Panel - Navigator */}
-        <div className="hidden lg:block w-64 flex-shrink-0">
-          <div className="card neon-border sticky top-28">
-            <h3 className="text-xs font-mono text-gray-400 uppercase mb-4">Question Navigator</h3>
-            <QuestionNavigator
-              total={questions.length}
-              current={current}
-              answers={Object.fromEntries(questions.map((q, i) => [i, answers[q._id]]))}
-              onNavigate={setCurrent}
-            />
-            <div className="mt-5 pt-4 border-t border-gray-800">
-              <button
-                onClick={() => setShowConfirm(true)}
-                disabled={submitting}
-                className="btn-neon w-full text-sm py-2.5"
-              >
-                {submitting ? 'SUBMITTING...' : 'SUBMIT MCQ'}
+        {/* Sidebar */}
+        <aside style={{width:240,flexShrink:0,position:'sticky',top:72}}
+          className="hidden lg:block">
+          <div style={{background:'#111',border:'1px solid #1a1a1a',borderRadius:14,padding:'1.25rem'}}>
+            <Navigator questions={questions} answers={answers} current={current} onGo={setCurrent} />
+            <div style={{marginTop:'1.25rem',paddingTop:'1.25rem',borderTop:'1px solid #1a1a1a'}}>
+              <button onClick={() => setShowSubmit(true)} disabled={submitting}
+                className="btn btn-primary" style={{width:'100%'}}>
+                Submit Test
               </button>
             </div>
           </div>
-        </div>
+        </aside>
       </div>
 
-      {/* Confirm Modal */}
-      {showConfirm && (
-        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-          <div className="card neon-border max-w-md w-full animate-slide-in">
-            <h3 className="text-xl font-mono font-bold text-textPrimary mb-2">Confirm Submission</h3>
-            <p className="text-gray-400 text-sm mb-5">
-              You have answered <span className="text-neon font-bold">{answeredCount}</span> out of{' '}
-              <span className="text-neon font-bold">{questions.length}</span> questions.
-              <br />
-              <span className="text-yellow-400 text-xs mt-1 block">⚠ This action cannot be undone.</span>
-            </p>
-            <div className="grid grid-cols-3 gap-3 text-sm font-mono mb-5">
-              <div className="bg-bg rounded-lg p-3 text-center border border-gray-800">
-                <div className="text-neon font-bold text-lg">{answeredCount}</div>
-                <div className="text-gray-500 text-xs">Attempted</div>
-              </div>
-              <div className="bg-bg rounded-lg p-3 text-center border border-gray-800">
-                <div className="text-yellow-400 font-bold text-lg">{questions.length - answeredCount}</div>
-                <div className="text-gray-500 text-xs">Skipped</div>
-              </div>
-              <div className="bg-bg rounded-lg p-3 text-center border border-gray-800">
-                <div className="text-blue-400 font-bold text-lg">
-                  {answeredCount * 4 - (0)}
-                </div>
-                <div className="text-gray-500 text-xs">Max Score</div>
-              </div>
-            </div>
-            <div className="flex gap-3">
-              <button onClick={() => setShowConfirm(false)}
-                className="btn-outline flex-1 py-2.5 text-sm">
-                CANCEL
-              </button>
-              <button onClick={() => { setShowConfirm(false); submitMCQ() }}
-                disabled={submitting}
-                className="btn-neon flex-1 py-2.5 text-sm">
-                {submitting ? 'SUBMITTING...' : 'CONFIRM SUBMIT'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <SubmitModal
+        open={showSubmit}
+        questions={questions}
+        answers={answers}
+        submitting={submitting}
+        onConfirm={() => doSubmit(false)}
+        onCancel={() => setShowSubmit(false)}
+      />
     </div>
   )
 }
 
-export default MCQTest
+const Spin = () => (
+  <svg className="animate-spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+    <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+  </svg>
+)

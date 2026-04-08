@@ -1,118 +1,107 @@
 import { useState, useRef, useEffect } from 'react'
-import { useNavigate, useLocation } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import VisionLogo from './VisionLogo'
 
-const Navbar = ({ subtitle }) => {
+export default function Navbar({ title }) {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
-  const location = useLocation()
   const [open, setOpen] = useState(false)
   const ref = useRef()
 
   useEffect(() => {
-    const handler = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
+    const fn = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', fn)
+    return () => document.removeEventListener('mousedown', fn)
   }, [])
 
-  const handleLogout = () => { logout(); navigate('/login') }
+  const doLogout = () => {
+    logout()
+    navigate(user?.role === 'admin' ? '/admin/login' : '/login')
+  }
 
-  const initials = user?.name?.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || '?'
+  const initials = user?.name?.split(' ').slice(0,2).map(n=>n[0]).join('').toUpperCase() || '?'
 
   return (
-    <header className="sticky top-0 z-50 bg-[#0e1512]/95 backdrop-blur-md border-b border-gray-800/60"
-      style={{ boxShadow: '0 1px 0 #00ff8810' }}>
-      <div className="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between gap-4">
+    <header style={{
+      position:'sticky', top:0, zIndex:50,
+      background:'#0a0a0a', borderBottom:'1px solid #1a1a1a',
+      backdropFilter:'blur(12px)'
+    }}>
+      <div style={{maxWidth:'1280px',margin:'0 auto',padding:'0 1.5rem',height:'56px',
+        display:'flex',alignItems:'center',justifyContent:'space-between',gap:'1rem'}}>
 
         {/* Left */}
-        <div className="flex items-center gap-4 min-w-0">
-          <button onClick={() => navigate('/dashboard')} className="flex-shrink-0">
+        <div style={{display:'flex',alignItems:'center',gap:'1.25rem'}}>
+          <button onClick={()=>navigate('/dashboard')} style={{background:'none',border:'none',cursor:'pointer',padding:0}}>
             <VisionLogo size="sm" />
           </button>
-          {subtitle && (
+          {title && (
             <>
-              <span className="text-gray-700 hidden sm:block">|</span>
-              <span className="text-xs font-mono text-gray-500 truncate hidden sm:block tracking-wide">
-                {subtitle}
-              </span>
+              <div style={{width:1,height:20,background:'#222'}} />
+              <span style={{fontSize:'0.8125rem',color:'#555',fontWeight:500}}>{title}</span>
             </>
           )}
         </div>
 
-        {/* Center pill */}
-        <div className="hidden md:flex items-center gap-1.5 bg-[#0b0f0c] border border-gray-800 rounded-full px-4 py-1.5">
-          <div className="w-1.5 h-1.5 rounded-full bg-neon animate-pulse" />
-          <span className="text-xs font-mono text-gray-400 tracking-widest uppercase">
-            Vision CSE Recruitment Test
-          </span>
-        </div>
-
-        {/* Right: user menu */}
+        {/* User menu */}
         {user && (
-          <div className="relative flex-shrink-0" ref={ref}>
-            <button onClick={() => setOpen(p => !p)}
-              className="flex items-center gap-2.5 pl-1 pr-3 py-1.5 rounded-full border border-gray-800 hover:border-gray-700 bg-[#0e1512] transition-all">
-              {/* Avatar */}
-              <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-mono font-bold flex-shrink-0"
-                style={{ background: 'linear-gradient(135deg, #00ff8820, #00ff8840)', color: '#00ff88', border: '1px solid #00ff8830' }}>
+          <div style={{position:'relative'}} ref={ref}>
+            <button onClick={()=>setOpen(p=>!p)}
+              style={{display:'flex',alignItems:'center',gap:'0.625rem',
+                background:'none',border:'1px solid #222',borderRadius:'10px',
+                padding:'0.375rem 0.75rem',cursor:'pointer',transition:'all 0.15s'}}>
+              <div style={{width:28,height:28,borderRadius:'50%',background:'#1a1a1a',
+                border:'1px solid #333',display:'flex',alignItems:'center',justifyContent:'center',
+                fontSize:'0.6875rem',fontWeight:700,color:'#fff',flexShrink:0,letterSpacing:'0.04em'}}>
                 {initials}
               </div>
-              <div className="hidden sm:block text-left min-w-0">
-                <p className="text-sm font-semibold text-gray-200 leading-none truncate max-w-[120px]">{user.name}</p>
-                <p className="text-[10px] font-mono text-gray-500 leading-none mt-0.5">{user.branch} · {user.scholarNumber}</p>
+              <div style={{display:'none'}} className="sm:block">
+                <p style={{fontSize:'0.8125rem',fontWeight:600,color:'#fff',lineHeight:1,whiteSpace:'nowrap'}}>{user.name}</p>
+                <p style={{fontSize:'0.6875rem',color:'#555',lineHeight:1,marginTop:'0.2rem',fontFamily:'monospace'}}>{user.scholarNumber}</p>
               </div>
-              <svg className={`w-3.5 h-3.5 text-gray-500 transition-transform flex-shrink-0 ${open ? 'rotate-180' : ''}`}
-                fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7"/>
+              <svg style={{color:'#444',transition:'transform 0.15s',transform:open?'rotate(180deg)':'none',flexShrink:0}}
+                width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M6 9l6 6 6-6"/>
               </svg>
             </button>
 
             {open && (
-              <div className="absolute right-0 mt-2 w-56 bg-[#111827] border border-gray-800 rounded-xl shadow-2xl overflow-hidden animate-slide-down z-50">
-                {/* Header */}
-                <div className="px-4 py-3 border-b border-gray-800 bg-[#0e1512]">
-                  <p className="text-xs text-gray-500 font-mono uppercase tracking-wider mb-0.5">Signed in as</p>
-                  <p className="text-sm font-semibold text-gray-200 truncate">{user.email}</p>
-                  <div className="flex items-center gap-1.5 mt-1">
-                    <span className="badge badge-neon">{user.branch}</span>
-                    {user.role === 'admin' && <span className="badge badge-yellow">Admin</span>}
+              <div className="animate-slide-down" style={{
+                position:'absolute',right:0,top:'calc(100% + 8px)',
+                width:220,background:'#111',border:'1px solid #222',
+                borderRadius:12,overflow:'hidden',boxShadow:'0 8px 32px #00000080',zIndex:100
+              }}>
+                {/* Profile */}
+                <div style={{padding:'0.875rem 1rem',borderBottom:'1px solid #1a1a1a',background:'#0f0f0f'}}>
+                  <p style={{fontSize:'0.6875rem',color:'#444',fontWeight:600,letterSpacing:'0.06em',textTransform:'uppercase',marginBottom:'0.25rem'}}>Signed in as</p>
+                  <p style={{fontSize:'0.875rem',fontWeight:600,color:'#fff',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{user.email}</p>
+                  <div style={{display:'flex',gap:'0.375rem',marginTop:'0.5rem'}}>
+                    <span className="badge badge-muted">{user.branch}</span>
+                    {user.role==='admin' && <span className="badge badge-warn">Admin</span>}
                   </div>
-                </div>
-
-                {/* Links */}
-                <div className="py-1">
-                  {location.pathname !== '/dashboard' && (
-                    <MenuItem icon="⊞" label="Dashboard" onClick={() => { navigate('/dashboard'); setOpen(false) }} />
-                  )}
-                  {user.role === 'admin' && (
-                    <MenuItem icon="⚙" label="Admin Panel" onClick={() => { navigate('/admin'); setOpen(false) }} />
-                  )}
                 </div>
 
                 {/* Status */}
-                <div className="px-4 py-2 border-t border-gray-800 border-b space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-gray-500 font-mono">MCQ Round</span>
-                    <span className={`badge ${user.mcqSubmitted ? 'badge-neon' : 'badge-gray'} text-[10px]`}>
-                      {user.mcqSubmitted ? '✓ Done' : 'Pending'}
-                    </span>
+                {user.role !== 'admin' && (
+                  <div style={{padding:'0.625rem 1rem',borderBottom:'1px solid #1a1a1a',display:'flex',flexDirection:'column',gap:'0.375rem'}}>
+                    {[['MCQ Round', user.mcqSubmitted]].map(([label, done]) => (
+                      <div key={label} style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                        <span style={{fontSize:'0.75rem',color:'#555'}}>{label}</span>
+                        <span className={`badge ${done?'badge-success':'badge-muted'}`}>{done?'Submitted':'Pending'}</span>
+                      </div>
+                    ))}
                   </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-gray-500 font-mono">Coding Round</span>
-                    <span className={`badge ${user.codingSubmitted ? 'badge-neon' : 'badge-gray'} text-[10px]`}>
-                      {user.codingSubmitted ? '✓ Done' : 'Pending'}
-                    </span>
-                  </div>
-                </div>
+                )}
 
-                {/* Logout */}
-                <div className="py-1">
-                  <button onClick={handleLogout}
-                    className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-400 hover:bg-red-500/10 transition-colors">
-                    <span className="text-base">⏻</span>
-                    <span className="font-mono text-xs">Sign Out</span>
-                  </button>
+                {/* Actions */}
+                <div style={{padding:'0.375rem'}}>
+                  {user.role==='admin' && (
+                    <MenuBtn label="Admin Panel" icon={<GridIcon/>} onClick={()=>{navigate('/admin');setOpen(false)}} />
+                  )}
+                  <MenuBtn label="Dashboard" icon={<HomeIcon/>} onClick={()=>{navigate('/dashboard');setOpen(false)}} />
+                  <div style={{height:1,background:'#1a1a1a',margin:'0.375rem 0'}} />
+                  <MenuBtn label="Sign Out" icon={<LogoutIcon/>} onClick={doLogout} danger />
                 </div>
               </div>
             )}
@@ -123,12 +112,19 @@ const Navbar = ({ subtitle }) => {
   )
 }
 
-const MenuItem = ({ icon, label, onClick }) => (
-  <button onClick={onClick}
-    className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-300 hover:bg-gray-800/60 hover:text-white transition-colors">
-    <span className="text-base text-gray-500">{icon}</span>
-    <span className="font-mono text-xs">{label}</span>
+const MenuBtn = ({label, icon, onClick, danger}) => (
+  <button onClick={onClick} style={{
+    width:'100%',display:'flex',alignItems:'center',gap:'0.625rem',
+    padding:'0.5rem 0.75rem',borderRadius:'8px',background:'none',border:'none',
+    cursor:'pointer',transition:'background 0.1s',color: danger?'#f87171':'#a1a1a1',
+    fontSize:'0.8125rem',fontWeight:500,textAlign:'left'
+  }}
+    onMouseEnter={e=>e.currentTarget.style.background=danger?'#ef444412':'#1a1a1a'}
+    onMouseLeave={e=>e.currentTarget.style.background='none'}>
+    <span style={{opacity:0.7}}>{icon}</span>{label}
   </button>
 )
 
-export default Navbar
+const HomeIcon = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9,22 9,12 15,12 15,22"/></svg>
+const GridIcon = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+const LogoutIcon = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>

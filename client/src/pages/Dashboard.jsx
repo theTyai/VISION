@@ -1,21 +1,18 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'react-hot-toast'
 import api from '../services/api'
+import socket, { connectSocket } from '../services/socket'
 import { useAuth } from '../context/AuthContext'
 import Navbar from '../components/Navbar'
-import VisionLogo from '../components/VisionLogo'
 
-// ── Countdown display ─────────────────────────────────────────────────────────
-const Countdown = ({ targetTime, label }) => {
-  const [diff, setDiff] = useState(Math.max(0, new Date(targetTime) - Date.now()))
-
+// ── Countdown ─────────────────────────────────────────────────────────────────
+function Countdown({ target, label, danger }) {
+  const [diff, setDiff] = useState(Math.max(0, new Date(target) - Date.now()))
   useEffect(() => {
-    const id = setInterval(() => setDiff(Math.max(0, new Date(targetTime) - Date.now())), 1000)
+    const id = setInterval(() => setDiff(Math.max(0, new Date(target) - Date.now())), 500)
     return () => clearInterval(id)
-  }, [targetTime])
-
-  if (diff === 0) return <span className="text-neon font-mono text-sm font-bold">LIVE NOW</span>
+  }, [target])
 
   const d = Math.floor(diff / 86400000)
   const h = Math.floor((diff % 86400000) / 3600000)
@@ -23,238 +20,285 @@ const Countdown = ({ targetTime, label }) => {
   const s = Math.floor((diff % 60000) / 1000)
 
   const units = []
-  if (d > 0) units.push({ v: d, u: 'd' })
-  units.push({ v: h, u: 'h' }, { v: m, u: 'm' }, { v: s, u: 's' })
+  if (d > 0) units.push([d, 'D'])
+  units.push([h,'H'], [m,'M'], [s,'S'])
+
+  const color = danger && diff < 300000 ? '#ef4444' : diff < 600000 ? '#f59e0b' : '#fff'
 
   return (
-    <div className="flex items-center gap-1">
-      {units.map(({ v, u }) => (
-        <div key={u} className="flex items-baseline gap-0.5">
-          <span className="text-neon font-mono font-bold text-sm tabular-nums"
-            style={{ textShadow: '0 0 10px #00ff8860' }}>
-            {String(v).padStart(2, '0')}
+    <div style={{display:'flex',alignItems:'center',gap:'0.375rem'}}>
+      {units.map(([v, u], i) => (
+        <span key={u}>
+          <span style={{fontFamily:'JetBrains Mono,monospace',fontWeight:700,fontSize:'1rem',color,letterSpacing:'-0.02em',
+            animation: diff < 60000 ? 'countdownPulse 1s infinite' : 'none'}}>
+            {String(v).padStart(2,'0')}
           </span>
-          <span className="text-gray-600 font-mono text-xs">{u}</span>
-        </div>
+          <span style={{fontSize:'0.6875rem',color:'#555',fontWeight:500,marginLeft:'1px'}}>{u}</span>
+          {i < units.length-1 && <span style={{color:'#333',margin:'0 1px'}}>:</span>}
+        </span>
       ))}
     </div>
   )
 }
 
-// ── Test status card ──────────────────────────────────────────────────────────
-const TestCard = ({ type, icon, title, meta, startTime, endTime, submitted, onStart }) => {
-  const now = Date.now()
-  const start = startTime ? new Date(startTime) : null
-  const end   = endTime   ? new Date(endTime)   : null
-
-  const isLive     = start && end && now >= start && now <= end
-  const isUpcoming = start && now < start
-  const isOver     = end && now > end
-
-  const statusLabel = submitted ? 'Completed'
-    : isLive     ? 'Live'
-    : isUpcoming ? 'Upcoming'
-    : isOver     ? 'Ended'
-    : 'Scheduled'
-
-  const StatusDot = () => {
-    if (submitted) return <span className="dot-done" />
-    if (isLive)    return <span className="dot-live" />
-    if (isOver)    return <span className="dot-off" />
-    return <span className="dot-soon" />
-  }
-
-  const canStart = isLive && !submitted
-
-  const fmtTime = d => d ? new Date(d).toLocaleString('en-IN', {
-    day: '2-digit', month: 'short', year: 'numeric',
-    hour: '2-digit', minute: '2-digit', hour12: true
-  }) : '—'
-
+// ── Modal ────────────────────────────────────────────────────────────────────
+function Modal({ open, title, message, confirmLabel, onConfirm, onCancel, danger }) {
+  if (!open) return null
   return (
-    <div className={`card flex flex-col gap-5 transition-all duration-200 ${
-      canStart ? 'neon-border hover:shadow-[0_8px_40px_#00ff8815]' : 'border-gray-800/60'
-    }`}>
-
-      {/* Header */}
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-xl flex items-center justify-center text-2xl flex-shrink-0"
-            style={{ background: canStart ? '#00ff8810' : '#1f2937', border: `1px solid ${canStart ? '#00ff8830' : '#374151'}` }}>
-            {icon}
-          </div>
-          <div>
-            <h3 className="font-mono font-bold text-base text-textPrimary">{title}</h3>
-            <p className="text-xs text-gray-500 mt-0.5">{meta}</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-1.5 flex-shrink-0">
-          <StatusDot />
-          <span className={`text-xs font-mono ${
-            submitted ? 'text-neon' : isLive ? 'text-yellow-400' : isOver ? 'text-gray-600' : 'text-blue-400'
-          }`}>{statusLabel}</span>
+    <div className="modal-backdrop">
+      <div className="modal animate-scale-in">
+        <h3 style={{fontSize:'1.0625rem',fontWeight:700,color:'#fff',letterSpacing:'-0.01em',marginBottom:'0.625rem'}}>
+          {title}
+        </h3>
+        <p style={{color:'#666',fontSize:'0.875rem',lineHeight:1.6}}>{message}</p>
+        <div style={{display:'flex',gap:'0.75rem',marginTop:'1.5rem'}}>
+          <button onClick={onCancel} className="btn btn-ghost" style={{flex:1}}>Cancel</button>
+          <button onClick={onConfirm} className={`btn ${danger?'btn-danger':'btn-primary'}`} style={{flex:1}}>
+            {confirmLabel}
+          </button>
         </div>
       </div>
-
-      {/* Time info */}
-      {startTime && (
-        <div className="grid grid-cols-2 gap-2">
-          {[['Start', fmtTime(startTime)], ['End', fmtTime(endTime)]].map(([label, val]) => (
-            <div key={label} className="bg-[#0b0f0c] rounded-lg px-3 py-2.5 border border-gray-800">
-              <p className="text-[10px] font-mono text-gray-600 uppercase tracking-wider mb-1">{label}</p>
-              <p className="text-xs text-gray-300 font-mono leading-snug">{val}</p>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Live countdown */}
-      {isUpcoming && startTime && (
-        <div className="flex items-center justify-between bg-blue-500/5 border border-blue-500/20 rounded-lg px-4 py-3">
-          <span className="text-xs font-mono text-blue-400 uppercase tracking-wide">Starts in</span>
-          <Countdown targetTime={startTime} />
-        </div>
-      )}
-      {isLive && !submitted && (
-        <div className="flex items-center justify-between bg-yellow-500/5 border border-yellow-500/20 rounded-lg px-4 py-3">
-          <span className="text-xs font-mono text-yellow-400 uppercase tracking-wide">Time remaining</span>
-          <Countdown targetTime={endTime} />
-        </div>
-      )}
-      {submitted && (
-        <div className="flex items-center gap-2 bg-neon/5 border border-neon/20 rounded-lg px-4 py-3">
-          <span className="text-neon text-base">✓</span>
-          <span className="text-xs font-mono text-neon">Submitted successfully — results pending admin review</span>
-        </div>
-      )}
-
-      {/* CTA */}
-      <button
-        onClick={onStart}
-        disabled={!canStart}
-        className={`w-full py-3 rounded-xl font-mono font-bold text-sm transition-all ${
-          canStart ? 'btn-neon' : 'bg-[#0e1512] text-gray-600 border border-gray-800 cursor-not-allowed'
-        }`}
-      >
-        {submitted ? '✓ Submitted'
-          : isOver   ? 'Test has ended'
-          : isLive   ? 'Start Test →'
-          : start    ? 'Not available yet'
-          : 'Awaiting Schedule'}
-      </button>
     </div>
   )
 }
 
-// ── Dashboard page ────────────────────────────────────────────────────────────
-const Dashboard = () => {
+// ── Main Dashboard ────────────────────────────────────────────────────────────
+export default function Dashboard() {
   const { user, refreshUser } = useAuth()
-  const [config, setConfig] = useState(null)
+  const [config, setConfig]   = useState(null)
   const [loading, setLoading] = useState(true)
+  const [modal, setModal]     = useState(null) // { title, message, confirm, action }
+  const [now, setNow]         = useState(Date.now())
   const navigate = useNavigate()
+
+  // Clock tick to evaluate test live status
+  useEffect(() => {
+    const clockId = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(clockId)
+  }, [])
+
+  // Real-time config sync via socket
+  useEffect(() => {
+    connectSocket(user?.id)
+    socket.on('config:update', (newConfig) => {
+      setConfig(newConfig)
+      toast('Schedule updated by admin', { icon: '📋', style:{ background:'#111',color:'#fff',border:'1px solid #222' } })
+    })
+    return () => socket.off('config:update')
+  }, [user])
 
   useEffect(() => {
     ;(async () => {
       try {
         await refreshUser()
-        const res = await api.get('/admin/config')
-        setConfig(res.data.config)
-      } catch { /* config may not exist yet */ }
+        const r = await api.get('/admin/config')
+        setConfig(r.data.config)
+      } catch { /* config may not exist */ }
       finally { setLoading(false) }
     })()
   }, [])
 
+  const start = config?.mcqStartTime ? new Date(config.mcqStartTime) : null
+  const end   = config?.mcqEndTime   ? new Date(config.mcqEndTime)   : null
+  const isLive     = start && end && now >= start && now <= end
+  const isUpcoming = start && now < start
+  const isOver     = end && now > end
+
+  const handleStart = () => {
+    if (user.mcqSubmitted) return
+    setModal({
+      title: 'Start MCQ Assessment',
+      message: `You are about to begin the MCQ round. The test has ${config?.mcqQuestionCount || 30} questions and ${config?.mcqDuration || 45} minutes. Once started, the timer cannot be paused. Switching tabs or opening external windows will result in immediate disqualification.`,
+      confirm: 'Start Test',
+      action: () => navigate('/test/mcq')
+    })
+  }
+
+  const fmtTime = d => d ? new Date(d).toLocaleString('en-IN', {
+    day:'2-digit', month:'short', year:'numeric',
+    hour:'2-digit', minute:'2-digit', hour12:true
+  }) : '—'
+
+  const Status = () => {
+    if (user?.isSuspended) return <div style={{display:'flex',alignItems:'center',gap:'0.5rem'}}><div className="dot" style={{background:'#f43f5e'}}/ ><span style={{fontSize:'0.8125rem',color:'#f43f5e',fontWeight:500}}>Suspended</span></div>
+    if (user?.mcqSubmitted) return <div style={{display:'flex',alignItems:'center',gap:'0.5rem'}}><div className="dot dot-done" /><span style={{fontSize:'0.8125rem',color:'#fff',fontWeight:500}}>Submitted</span></div>
+    if (!start) return <div style={{display:'flex',alignItems:'center',gap:'0.5rem'}}><div className="dot dot-off" /><span style={{fontSize:'0.8125rem',color:'#555'}}>Awaiting Schedule</span></div>
+    if (isLive) return <div style={{display:'flex',alignItems:'center',gap:'0.5rem'}}><div className="dot dot-live" /><span style={{fontSize:'0.8125rem',color:'#22c55e',fontWeight:500}}>Live Now</span></div>
+    if (isUpcoming) return <div style={{display:'flex',alignItems:'center',gap:'0.5rem'}}><div className="dot dot-pending" /><span style={{fontSize:'0.8125rem',color:'#f59e0b',fontWeight:500}}>Scheduled</span></div>
+    return <div style={{display:'flex',alignItems:'center',gap:'0.5rem'}}><div className="dot dot-off" /><span style={{fontSize:'0.8125rem',color:'#555'}}>Ended</span></div>
+  }
+
   if (loading) return (
-    <div className="min-h-screen bg-bg flex items-center justify-center">
-      <div className="flex flex-col items-center gap-4">
-        <div className="w-8 h-8 border-2 border-neon/30 border-t-neon rounded-full animate-spin" />
-        <p className="text-gray-500 font-mono text-sm">Loading portal...</p>
+    <div style={{minHeight:'100vh',background:'#0a0a0a',display:'flex',alignItems:'center',justifyContent:'center'}}>
+      <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:'1rem'}}>
+        <div style={{width:32,height:32,border:'2px solid #222',borderTopColor:'#fff',borderRadius:'50%'}} className="animate-spin" />
+        <p style={{color:'#333',fontFamily:'monospace',fontSize:'0.8125rem'}}>Loading portal...</p>
       </div>
     </div>
   )
 
   return (
-    <div className="min-h-screen bg-bg grid-bg">
+    <div style={{minHeight:'100vh',background:'#0a0a0a'}}>
       <Navbar />
+      <main style={{maxWidth:'960px',margin:'0 auto',padding:'2.5rem 1.5rem'}}>
 
-      <main className="max-w-5xl mx-auto px-4 py-10">
+        {/* Welcome */}
+        <div style={{marginBottom:'2.5rem'}}>
+          <p style={{fontSize:'0.75rem',color:'#444',fontWeight:600,letterSpacing:'0.08em',textTransform:'uppercase',marginBottom:'0.5rem'}}>Welcome back</p>
+          <h1 style={{fontSize:'1.875rem',fontWeight:800,color:'#fff',letterSpacing:'-0.03em',lineHeight:1.2}}>
+            {user?.name}
+          </h1>
+          <p style={{color:'#555',fontSize:'0.9375rem',marginTop:'0.375rem',fontFamily:'monospace'}}>
+            {user?.branch} · {user?.scholarNumber}
+          </p>
+        </div>
 
-        {/* Welcome header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-10 stagger">
-          <div className="animate-fade-in">
-            <p className="text-xs font-mono text-gray-500 uppercase tracking-widest mb-1">Welcome back</p>
-            <h1 className="text-2xl sm:text-3xl font-bold text-textPrimary">
-              {user?.name}
-            </h1>
-            <p className="text-gray-500 text-sm mt-1 font-mono">{user?.branch} · {user?.scholarNumber}</p>
-          </div>
-          <div className="animate-fade-in flex items-center gap-3">
-            <div className="bg-[#111827] border border-gray-800 rounded-xl px-4 py-3 text-right">
-              <p className="text-[10px] font-mono text-gray-600 uppercase tracking-wider">Recruitment</p>
-              <p className="text-neon font-mono font-bold text-sm mt-0.5">Vision CSE 2024</p>
+        {/* MCQ Test Card */}
+        <div style={{background:'#111',border:'1px solid #222',borderRadius:16,overflow:'hidden',marginBottom:'1.5rem'}}>
+
+          {/* Header strip */}
+          <div style={{padding:'1.25rem 1.5rem',borderBottom:'1px solid #1a1a1a',display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:'1rem',background:'#0f0f0f'}}>
+            <div>
+              <p style={{fontSize:'0.6875rem',color:'#444',fontWeight:700,letterSpacing:'0.08em',textTransform:'uppercase',marginBottom:'0.25rem'}}>Assessment</p>
+              <h2 style={{fontSize:'1.125rem',fontWeight:700,color:'#fff',letterSpacing:'-0.01em'}}>MCQ Round</h2>
             </div>
+            <Status />
           </div>
-        </div>
 
-        {/* Notice */}
-        <div className="mb-8 flex items-start gap-3 bg-[#111827] border border-gray-800 rounded-xl p-4 animate-fade-in">
-          <span className="text-xl mt-0.5">📋</span>
-          <div>
-            <p className="text-sm font-semibold text-textPrimary mb-1">Assessment Instructions</p>
-            <ul className="text-xs text-gray-400 space-y-1 leading-relaxed list-disc list-inside">
-              <li>Complete both MCQ and Coding rounds before the deadline.</li>
-              <li>MCQ: 30 questions, 45 minutes. Scoring: +4 correct, −1 wrong.</li>
-              <li>Coding: 3 problems, 45 minutes. Monaco editor with C, C++, Python, JS.</li>
-              <li>Results are reviewed exclusively by the admin panel — not visible to candidates.</li>
-              <li>Switching tabs or exiting fullscreen is monitored and may trigger auto-submission.</li>
-            </ul>
-          </div>
-        </div>
+          {/* Body */}
+          <div style={{padding:'1.5rem'}}>
 
-        {/* Test cards */}
-        <div className="grid md:grid-cols-2 gap-5 stagger">
-          <div className="animate-fade-in">
-            <TestCard
-              type="mcq" icon="📝" title="MCQ Round"
-              meta="30 questions · 45 minutes · +4 / −1 scoring"
-              startTime={config?.mcqStartTime}
-              endTime={config?.mcqEndTime}
-              submitted={user?.mcqSubmitted}
-              onStart={() => { if (!user.mcqSubmitted) navigate('/test/mcq') }}
-            />
-          </div>
-          <div className="animate-fade-in">
-            <TestCard
-              type="coding" icon="💻" title="Coding Round"
-              meta="3 problems · 45 minutes · Monaco editor"
-              startTime={config?.codingStartTime}
-              endTime={config?.codingEndTime}
-              submitted={user?.codingSubmitted}
-              onStart={() => { if (!user.codingSubmitted) navigate('/test/coding') }}
-            />
-          </div>
-        </div>
+            {/* Meta row */}
+            <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'1rem',marginBottom:'1.5rem'}}>
+              {[
+                ['Questions', config?.mcqQuestionCount || '—'],
+                ['Duration', config?.mcqDuration ? `${config.mcqDuration} min` : '—'],
+                ['Scoring', '+4 / −1'],
+              ].map(([label, value]) => (
+                <div key={label} style={{background:'#0f0f0f',border:'1px solid #1a1a1a',borderRadius:10,padding:'0.875rem 1rem'}}>
+                  <p style={{fontSize:'0.6875rem',color:'#444',fontWeight:600,letterSpacing:'0.06em',textTransform:'uppercase',marginBottom:'0.375rem'}}>{label}</p>
+                  <p style={{fontSize:'1rem',fontWeight:700,color:'#fff',fontFamily:'JetBrains Mono,monospace'}}>{value}</p>
+                </div>
+              ))}
+            </div>
 
-        {/* Info row */}
-        <div className="mt-8 grid grid-cols-1 sm:grid-cols-3 gap-3 stagger">
-          {[
-            { icon: '💾', title: 'Auto-Save', desc: 'MCQ answers saved every 30s automatically' },
-            { icon: '🔒', title: 'Proctored', desc: 'Tab switching detected · Fullscreen recommended' },
-            { icon: '📊', title: 'Admin Results', desc: 'Scores evaluated server-side, admin-only view' }
-          ].map((item, i) => (
-            <div key={i} className="flex gap-3 bg-[#111827] border border-gray-800 rounded-xl p-4 animate-fade-in">
-              <span className="text-lg flex-shrink-0 mt-0.5">{item.icon}</span>
-              <div>
-                <p className="text-sm font-semibold text-textPrimary">{item.title}</p>
-                <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">{item.desc}</p>
+            {/* Schedule */}
+            {start ? (
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0.75rem',marginBottom:'1.5rem'}}>
+                {[['Start', fmtTime(start)], ['End', fmtTime(end)]].map(([lbl,val]) => (
+                  <div key={lbl} style={{background:'#0f0f0f',border:'1px solid #1a1a1a',borderRadius:10,padding:'0.875rem 1rem'}}>
+                    <p style={{fontSize:'0.6875rem',color:'#444',fontWeight:600,letterSpacing:'0.06em',textTransform:'uppercase',marginBottom:'0.375rem'}}>{lbl}</p>
+                    <p style={{fontSize:'0.8125rem',color:'#a1a1a1',fontFamily:'JetBrains Mono,monospace'}}>{val}</p>
+                  </div>
+                ))}
               </div>
-            </div>
-          ))}
+            ) : (
+              <div className="alert-info" style={{marginBottom:'1.5rem'}}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{flexShrink:0,marginTop:1}}>
+                  <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
+                </svg>
+                <span>The test schedule has not been published yet. This page will update automatically when the admin sets the schedule.</span>
+              </div>
+            )}
+
+            {/* Countdown banners */}
+            {isUpcoming && (
+              <div style={{background:'#0f0f0f',border:'1px solid #222',borderRadius:10,padding:'1rem 1.25rem',
+                display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'1.5rem',flexWrap:'wrap',gap:'0.75rem'}}>
+                <div>
+                  <p style={{fontSize:'0.6875rem',color:'#555',fontWeight:600,letterSpacing:'0.06em',textTransform:'uppercase',marginBottom:'0.25rem'}}>Starts in</p>
+                  <Countdown target={start} />
+                </div>
+                <span className="badge badge-warn">Upcoming</span>
+              </div>
+            )}
+
+            {isLive && !user?.mcqSubmitted && (
+              <div style={{background:'#ffffff08',border:'1px solid #ffffff15',borderRadius:10,padding:'1rem 1.25rem',
+                display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'1.5rem',flexWrap:'wrap',gap:'0.75rem'}}>
+                <div>
+                  <p style={{fontSize:'0.6875rem',color:'#555',fontWeight:600,letterSpacing:'0.06em',textTransform:'uppercase',marginBottom:'0.25rem'}}>Time Remaining</p>
+                  <Countdown target={end} danger />
+                </div>
+                <span className="badge badge-white">Live Now</span>
+              </div>
+            )}
+
+            {user?.isSuspended && (
+              <div className="alert-error" style={{marginBottom:'1.5rem',borderColor:'rgba(244,63,94,0.3)',background:'rgba(244,63,94,0.1)'}}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{flexShrink:0,marginTop:1}}>
+                  <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                </svg>
+                <div>
+                  <p style={{fontWeight:600,color:'#f43f5e'}}>Account Permanently Suspended</p>
+                  <p style={{color:'#fca5a5',fontSize:'0.8125rem',marginTop:'0.125rem'}}>You have been flagged for repeated testing violations. Contact administration.</p>
+                </div>
+              </div>
+            )}
+
+            {!user?.isSuspended && user?.mcqSubmitted && (
+              <div className="alert-info" style={{marginBottom:'1.5rem',borderColor:'#ffffff15',background:'#ffffff08'}}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{flexShrink:0,marginTop:1}}>
+                  <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22,4 12,14.01 9,11.01"/>
+                </svg>
+                <div>
+                  <p style={{fontWeight:600,color:'#fff'}}>Test submitted successfully</p>
+                  <p style={{color:'#555',fontSize:'0.8125rem',marginTop:'0.125rem'}}>Results are under admin review and will not be displayed to candidates.</p>
+                </div>
+              </div>
+            )}
+
+            {/* CTA */}
+            <button
+              onClick={handleStart}
+              disabled={!isLive || !!user?.mcqSubmitted || !!user?.isSuspended}
+              className="btn btn-primary"
+              style={{width:'100%',padding:'0.875rem',fontSize:'0.9375rem'}}>
+              {user?.isSuspended ? 'Suspended'
+                : user?.mcqSubmitted ? 'Submitted'
+                : isOver ? 'Test has ended'
+                : isLive ? 'Begin Assessment'
+                : 'Not available yet'}
+            </button>
+          </div>
+        </div>
+
+        {/* Instructions */}
+        <div style={{background:'#050805',border:'1px solid #1a1a1a',borderRadius:14,padding:'1.75rem',marginTop:'1.5rem', boxShadow:'0 10px 40px rgba(0,0,0,0.5)'}}>
+          <h3 style={{fontSize:'1rem',fontWeight:700,color:'#fff',letterSpacing:'-0.01em',marginBottom:'1.25rem',display:'flex',alignItems:'center',gap:'0.5rem'}}>
+            <div style={{width:8,height:8,background:'var(--accent)',borderRadius:'50%'}}></div> Assessment Guidelines
+          </h3>
+          <div style={{display:'grid',gap:'1rem'}}>
+            {[
+              ['Marking Scheme', 'Each correct answer awards +4 marks. Each incorrect answer deducts 1 mark. Unattempted questions carry no penalty.'],
+              ['Strict Tab Monitoring', 'Switching to another browser tab or window, or losing window focus, will result in immediate disqualification. Administrator will be flagged automatically.'],
+              ['Auto-save', 'Your answers are automatically saved every 30 seconds. You can also navigate freely between questions.'],
+              ['Schedule Sync', 'The test schedule updates in real time. If the admin modifies the timing, your page will reflect it immediately without a refresh.'],
+            ].map(([title, desc]) => (
+              <div key={title} style={{display:'flex',gap:'1rem',alignItems:'flex-start',background:'#0a0e0a',padding:'1rem',borderRadius:8,border:'1px solid #111'}}>
+                <div style={{width:6,height:6,borderRadius:'50%',background:'var(--accent)',marginTop:'0.4rem',flexShrink:0}} />
+                <div>
+                  <span style={{fontWeight:700,color:'#00ff66',fontSize:'0.875rem',letterSpacing:'0.02em'}}>{title} — </span>
+                  <span style={{color:'#a1a1a1',fontSize:'0.875rem',lineHeight:1.6}}>{desc}</span>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
 
       </main>
+
+      {/* Start confirmation modal */}
+      {modal && (
+        <Modal
+          open={!!modal}
+          title={modal.title}
+          message={modal.message}
+          confirmLabel={modal.confirm}
+          onConfirm={() => { setModal(null); modal.action() }}
+          onCancel={() => setModal(null)}
+        />
+      )}
     </div>
   )
 }
-
-export default Dashboard
