@@ -13,10 +13,26 @@ const adminRoutes = require('./routes/adminRoutes')
 const app = express()
 const server = http.createServer(app)
 
+// ── CORS — support multiple allowed origins via comma-separated CLIENT_URL ────
+// Example: CLIENT_URL=https://vision-oa.onrender.com,http://localhost:5173
+const allowedOrigins = (process.env.CLIENT_URL || 'http://localhost:5173')
+  .split(',')
+  .map(o => o.trim())
+  .filter(Boolean)
+
+const corsOptions = {
+  origin: (origin, callback) => {
+    // Allow requests with no origin (curl, Postman, server-side)
+    if (!origin) return callback(null, true)
+    if (allowedOrigins.includes(origin)) return callback(null, true)
+    console.warn(`⚠️  CORS blocked origin: ${origin}`)
+    callback(new Error(`CORS: origin ${origin} not allowed`))
+  },
+  credentials: true
+}
+
 // ── Socket.io setup ───────────────────────────────────────────────────────────
-const io = new Server(server, {
-  cors: { origin: process.env.CLIENT_URL, credentials: true }
-})
+const io = new Server(server, { cors: corsOptions })
 
 // Expose io to routes via app.locals
 app.locals.io = io
@@ -25,7 +41,6 @@ app.locals.io = io
 const onlineUsers = new Map()
 
 io.on('connection', (socket) => {
-  // Client registers their userId after connecting
   socket.on('register', (userId) => {
     if (userId) {
       onlineUsers.set(userId, socket.id)
@@ -47,7 +62,7 @@ io.on('connection', (socket) => {
 app.locals.onlineUsers = onlineUsers
 
 // ── Middleware ────────────────────────────────────────────────────────────────
-app.use(cors({ origin: process.env.CLIENT_URL, credentials: true }))
+app.use(cors(corsOptions))
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true, limit: '10mb' }))
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')))
@@ -57,8 +72,12 @@ app.use('/api/auth', authRoutes)
 app.use('/api/mcq', mcqRoutes)
 app.use('/api/admin', adminRoutes)
 
-// Health
-app.get('/api/health', (_, res) => res.json({ status: 'OK', env: process.env.NODE_ENV }))
+// Health — also shows CORS config for debugging
+app.get('/api/health', (_, res) => res.json({
+  status: 'OK',
+  env: process.env.NODE_ENV,
+  allowedOrigins
+}))
 
 // 404
 app.use((req, res) => res.status(404).json({ success: false, message: 'Route not found' }))
@@ -72,9 +91,20 @@ app.use((err, req, res, next) => {
 // ── Start ─────────────────────────────────────────────────────────────────────
 connectDB().then(() => {
   const PORT = process.env.PORT || 5000
+
+  // Warn about missing critical env vars
+  const required = ['MONGO_URI', 'JWT_SECRET', 'CLIENT_URL']
+  required.forEach(key => {
+    if (!process.env[key]) console.warn(`⚠️  Missing env var: ${key}`)
+  })
+  if (process.env.JWT_SECRET === 'replace_this_with_a_long_random_secret_string') {
+    console.warn('⚠️  JWT_SECRET is still the placeholder — set a real secret in Railway env vars!')
+  }
+
   server.listen(PORT, () => {
     console.log(`\n🚀  Vision OA Server  →  http://localhost:${PORT}`)
-    console.log(`🌍  Environment       →  ${process.env.NODE_ENV || 'development'}\n`)
+    console.log(`🌍  Environment       →  ${process.env.NODE_ENV || 'development'}`)
+    console.log(`🔒  Allowed origins   →  ${allowedOrigins.join(', ')}\n`)
   })
 })
 

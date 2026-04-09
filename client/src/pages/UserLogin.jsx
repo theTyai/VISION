@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { toast } from 'react-hot-toast'
 import api from '../services/api'
 import { useAuth } from '../context/AuthContext'
@@ -12,12 +12,16 @@ export default function UserLogin() {
   const [show, setShow] = useState(false)
   const { login } = useAuth()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+
+  const isJustVerified = searchParams.get('verified') === 'true'
+  const isJustRegistered = searchParams.get('registered') === 'true'
 
   // Matrix code background decoration
   const CodeBg = () => (
     <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none' }}>
       <div className="coding-bg">
-        {Array(20).fill('const handleLogin=async(req,res)=>{\n  const auth=req.headers.authorization;\n  if(!auth)return res.status(401);\n  try{\n    const dec=jwt.verify(auth,process.env.SEC);\n    req.user=dec;\n    next();\n  }catch(e){\n    return res.status(403);\n  }\n};\n\n').join('')}
+        {Array(20).fill('const handleLogin=async(req,res)=>{\\n  const auth=req.headers.authorization;\\n  if(!auth)return res.status(401);\\n  try{\\n    const dec=jwt.verify(auth,process.env.SEC);\\n    req.user=dec;\\n    next();\\n  }catch(e){\\n    return res.status(403);\\n  }\\n};\\n\\n').join('')}
       </div>
       <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, var(--surface) 0%, transparent 20%, transparent 80%, var(--surface) 100%)' }} />
     </div>
@@ -41,13 +45,10 @@ export default function UserLogin() {
   }
 
   return (
-    <div className="page" style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
+    <div className="page" style={{ display: 'flex', minHeight: '100vh' }}>
 
-      {/* Left panel - Glassy Feature Info */}
-      <div style={{ width: '45%', background: 'var(--surface)', borderRight: '1px solid var(--border)', padding: '3.5rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', position: 'relative', overflow: 'hidden' }}
-        className="hidden lg:flex">
-
-        {/* Glow Effects & Animations */}
+      {/* Left panel — hidden on mobile */}
+      <div className="hidden lg:flex" style={{ width: '45%', background: 'var(--surface)', borderRight: '1px solid var(--border)', padding: '3.5rem', flexDirection: 'column', justifyContent: 'space-between', position: 'relative', overflow: 'hidden' }}>
         <CodeBg />
         <div style={{ position: 'absolute', top: '-10%', left: '-10%', width: '60%', height: '60%', background: 'var(--gradient-glow)', filter: 'blur(100px)', opacity: 0.2, pointerEvents: 'none' }} />
 
@@ -85,14 +86,29 @@ export default function UserLogin() {
       </div>
 
       {/* Right panel */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '2rem', position: 'relative', background: '#020402' }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '2rem', position: 'relative', background: '#020402', minHeight: '100vh', overflowY: 'auto' }}>
 
         <div style={{ position: 'absolute', bottom: '-10%', right: '-10%', width: '50%', height: '50%', background: 'var(--gradient-glow)', filter: 'blur(100px)', opacity: 0.4, pointerEvents: 'none' }} />
 
         <div style={{ width: '100%', maxWidth: '440px' }} className="animate-scale-in">
+          {/* Mobile logo */}
           <div className="lg:hidden" style={{ marginBottom: '2.5rem', display: 'flex', justifyContent: 'center' }}>
             <VisionLogo size="lg" />
           </div>
+
+          {/* Post-registration or verification banners */}
+          {(isJustVerified || isJustRegistered) && (
+            <div className="alert-info animate-slide-down" style={{ marginBottom: '1.5rem' }}>
+              <span style={{ fontSize: '1.125rem', lineHeight: 1 }}>
+                {isJustVerified ? '✅' : '📧'}
+              </span>
+              <span>
+                {isJustVerified
+                  ? 'Email verified! You can now log in.'
+                  : 'Account created! Please check your email and verify your account before logging in.'}
+              </span>
+            </div>
+          )}
 
           <div className="card">
             <div style={{ marginBottom: '2rem', textAlign: 'center' }}>

@@ -390,3 +390,67 @@ code, pre, kbd, .mono {
   animation: codeScroll 60s linear infinite;
   text-shadow: none;
 }
+
+/* ─── Responsive Auth Layout ──────────────────────────────────────────────── */
+
+/* Two-column auth grid (Scholar + Branch, Password + Confirm) */
+.auth-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+/* Mobile: stack two-column grids */
+@media (max-width: 480px) {
+  .auth-grid-2 {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ─── Responsive: Mobile global tweaks ───────────────────────────────────── */
+@media (max-width: 768px) {
+  /* Auth pages: right panel takes full width */
+  .page > div[style*="flex: 1"] {
+    padding: 1.5rem 1rem;
+  }
+
+  /* Cards: tighter padding on mobile */
+  .card {
+    padding: 1.25rem;
+  }
+
+  /* Smaller headings */
+  h1 { font-size: 1.75rem !important; }
+  h2 { font-size: 1.4rem !important; }
+
+  /* Table: allow horizontal scroll */
+  .table-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Modal: full-screen on mobile */
+  .modal {
+    max-width: 100%;
+    margin: 0;
+    border-radius: 0;
+    min-height: 100vh;
+    align-self: flex-end;
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+  }
+
+  .modal-backdrop {
+    align-items: flex-end;
+    padding: 0;
+  }
+}
+
+/* ─── Tailwind responsive helpers (used by auth pages) ───────────────────── */
+/* These mirror the Tailwind lg: prefix for non-Tailwind-generated classes */
+.hidden { display: none !important; }
+
+@media (min-width: 1024px) {
+  .hidden.lg\:flex { display: flex !important; }
+  .lg\:hidden { display: none !important; }
+}

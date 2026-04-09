@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { toast } from 'react-hot-toast'
 import api from '../services/api'
-import { useAuth } from '../context/AuthContext'
 import VisionLogo from '../components/VisionLogo'
 
 const BRANCHES = ['CSE', 'IT', 'ECE', 'EE', 'ME', 'CE', 'Other']
@@ -13,7 +12,7 @@ export default function Register() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [showPass, setShowPass] = useState(false)
-  const { login } = useAuth()
+  const [success, setSuccess] = useState(false)
   const navigate = useNavigate()
 
   // Matrix code background decoration
@@ -45,10 +44,9 @@ export default function Register() {
     if (!validate()) return
     setLoading(true)
     try {
-      const res = await api.post('/auth/register', form)
-      login(res.data.token, res.data.user)
-      toast.success('Account created! Welcome.')
-      navigate('/dashboard')
+      await api.post('/auth/register', form)
+      setSuccess(true)
+      toast.success('Registration successful! Please verify your email.')
     } catch (err) {
       const msg = err.response?.data?.message || 'Registration failed. Please try again.'
       setError(msg)
@@ -57,12 +55,24 @@ export default function Register() {
     }
   }
 
+  if (success) {
+    return (
+      <div className="page flex items-center justify-center min-h-screen p-6">
+        <div className="card w-full max-w-md text-center p-8 animate-scale-in">
+          <div className="text-4xl mb-4">📧</div>
+          <h2 className="text-2xl font-bold mb-2">Check your email</h2>
+          <p className="text-var(--text-2) mb-6">We've sent a verification link to <strong>{form.email}</strong>. Please verify your account to proceed.</p>
+          <Link to="/login" className="btn btn-primary w-full block text-center">Back to Login</Link>
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <div className="page" style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
+    <div className="page flex min-h-screen">
 
       {/* Left panel */}
-      <div style={{ width: '45%', background: 'var(--surface)', borderRight: '1px solid var(--border)', padding: '3.5rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', position: 'relative', overflow: 'hidden' }}
-        className="hidden lg:flex">
+      <div className="hidden lg:flex w-[45%] bg-[var(--surface)] border-r border-[var(--border)] p-14 flex-col justify-between relative overflow-hidden">
 
         {/* Glow Effects & Animations */}
         <CodeBg />
@@ -101,11 +111,11 @@ export default function Register() {
         </p>
       </div>
 
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start', padding: '3rem 2rem', position: 'relative', overflowY: 'auto', maxHeight: '100vh', background: '#020402' }}>
+      <div className="flex-1 flex flex-col items-center justify-center p-8 relative overflow-y-auto bg-[#020402]">
         <div style={{ position: 'absolute', bottom: '-10%', right: '-10%', width: '50%', height: '50%', background: 'var(--gradient-glow)', filter: 'blur(100px)', opacity: 0.4, pointerEvents: 'none' }} />
 
-        <div style={{ width: '100%', maxWidth: '480px' }} className="animate-scale-in">
-          <div className="lg:hidden" style={{ marginBottom: '2.5rem', display: 'flex', justifyContent: 'center' }}>
+        <div className="w-full max-w-[480px] animate-scale-in">
+          <div className="lg:hidden mb-10 flex justify-center">
             <VisionLogo size="lg" />
           </div>
 
@@ -142,7 +152,7 @@ export default function Register() {
                 {errors.email && <p style={{ color: 'var(--danger)', fontSize: '0.75rem', marginTop: '0.375rem', fontFamily: 'JetBrains Mono,monospace' }}>{errors.email}</p>}
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+              <div className="auth-grid-2">
                 <div>
                   <label className="label">Scholar Number</label>
                   <input value={form.scholarNumber} onChange={e => set('scholarNumber', e.target.value)}
@@ -158,7 +168,7 @@ export default function Register() {
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+              <div className="auth-grid-2">
                 <div>
                   <label className="label">Password</label>
                   <div style={{ position: 'relative' }}>
