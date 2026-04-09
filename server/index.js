@@ -15,7 +15,9 @@ const server = http.createServer(app)
 
 // ── Socket.io setup ───────────────────────────────────────────────────────────
 const io = new Server(server, {
-  cors: { origin: "*", credentials: true }
+  cors: {
+    origin: "*"
+  }
 })
 
 // Expose io to routes via app.locals
@@ -47,7 +49,9 @@ io.on('connection', (socket) => {
 app.locals.onlineUsers = onlineUsers
 
 // ── Middleware ────────────────────────────────────────────────────────────────
-app.use(cors({ origin: process.env.CLIENT_URL, credentials: true }))
+app.use(cors({
+  origin: "*"
+}))
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true, limit: '10mb' }))
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')))
