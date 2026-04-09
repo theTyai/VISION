@@ -15,7 +15,7 @@ const server = http.createServer(app)
 
 // ── CORS — support multiple allowed origins via comma-separated CLIENT_URL ────
 // Example: CLIENT_URL=https://vision-oa.onrender.com,http://localhost:5173
-const allowedOrigins = (process.env.CLIENT_URL || 'http://localhost:5173')
+const allowedOrigins = (process.env.CLIENT_URL || 'http://localhost:5173' || 'https://vision-nine-sigma.vercel.app')
   .split(',')
   .map(o => o.trim())
   .filter(Boolean)

@@ -1,8 +1,7 @@
 import axios from 'axios'
 
-// In production (Vercel/Netlify), set VITE_API_URL to your backend URL.
-// Falls back to Railway URL if the env var is not set.
-export const ROOT_URL = import.meta.env.VITE_API_URL || 'https://vision-oa-production.up.railway.app'
+// Set VITE_API_URL in your Vercel environment variables to your Railway backend URL
+export const ROOT_URL = import.meta.env.VITE_API_URL || 'https://vision-production-572b.up.railway.app'
 
 const api = axios.create({
   baseURL: `${ROOT_URL}/api`,
